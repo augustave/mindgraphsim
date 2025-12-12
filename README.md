@@ -138,6 +138,12 @@ node tests/generate_qa_report.cjs
 node tests/generate_s3_model_comparison_report.cjs
 ```
 
+### Site Build Agent Contract
+
+All automated edits for the Vercel site must respect `docs/mindgraphsim_site_agent_instructions.yaml`.
+Agents/tools are only allowed to change build config, TypeScript types, and dead imports.
+Physics and UX semantics are governed by the MindGraphSim engine PRDs (S2–S6).
+
 See the [CI Status Report (S6)](docs/mindgraphsim_s6_ci_status.yaml) for the specific physics constraints certified for v1.0.
 
 ### 2. Lab Reports
