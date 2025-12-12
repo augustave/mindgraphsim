@@ -51,14 +51,8 @@ const PROFILE_REGISTRY = listDomainProfiles().map(p => ({
   overload_cut_fraction: p.overload_cut_fraction,
   recovery_rate: p.recovery_half_life > 0 ? (0.7 / p.recovery_half_life) : 0.1,
   decay: p.activation_decay_base,
-  activationVarianceBoost: 0.15 // Default or add to profile interface
+  activationVarianceBoost: 0.15
 }));
-
-console.log(`[Adapter] Registry loaded ${PROFILE_REGISTRY.length} profiles.`);
-if (PROFILE_REGISTRY.length > 0) {
-  const debugProfile = PROFILE_REGISTRY.find(p => p.id === 'autistic_intensity') || PROFILE_REGISTRY[0];
-  console.log(`[Adapter] Config Check (${debugProfile.id}): Gain=${debugProfile.physics.activation_gain}, Friction=${debugProfile.physics.friction_gain}`);
-}
 
 // Populate legacy PROFILES map for compatibility
 // Populate legacy PROFILES map for compatibility
