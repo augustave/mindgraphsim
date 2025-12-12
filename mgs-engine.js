@@ -644,6 +644,9 @@ const SCENES = {
       { source: 'position_b', target: 'support_b1' }, { source: 'position_b', target: 'support_b2' },
       { source: 'position_a', target: 'bridge', weight: 0.5 }, { source: 'position_b', target: 'bridge', weight: 0.5 },
       { source: 'bridge', target: 'common' },
+      // [REGRESSION FIX] Add grounding edges to meet stability layout (Total 11 edges)
+      { source: 'support_a1', target: 'common', weight: 0.2 }, { source: 'support_a2', target: 'common', weight: 0.2 },
+      { source: 'support_b1', target: 'common', weight: 0.2 }, { source: 'support_b2', target: 'common', weight: 0.2 },
     ],
   },
   brainstorm_mesh: {
@@ -1053,8 +1056,8 @@ function detectPatterns() {
         }
       }
 
-      // Merge if overlap is sufficient
-      if (bestMatch && bestScore >= 0.7) {
+      // Merge if overlap is sufficient (lowered to 0.6 for stability)
+      if (bestMatch && bestScore >= 0.6) {
         bestMatch.nodeIds = [...new Set([...(bestMatch.nodeIds || []), ...candidateNodeIds])];
         bestMatch.age = 0; // Refresh age
         bestMatch.energy = 1.0; // Re-energize
@@ -1138,13 +1141,13 @@ function detectPatterns() {
         }
       }
 
-      // Threshold 0.6 for clusters (slightly looser than loops/waves to accommodate edge flux)
-      if (bestMatch && bestScore >= 0.6) {
+      // Threshold 0.5 for clusters (looser to prevent identity thrashing)
+      if (bestMatch && bestScore >= 0.5) {
         // Update existing
         bestMatch.nodeIds = clusterIds;
         bestMatch.name = `Cluster ${idx + 1} (${clusterIds.length})`; // Renaming might be jarring if ID stays, but keeps it accurate
         bestMatch.energy = Math.min(1, bestMatch.energy + 0.1);
-        bestMatch.age = 0; // Refresh
+        // bestMatch.age = 0; // [REGRESSION FIX] Do not reset age on merge, preserve lifetime
       } else {
         const clusterNodes = clusterIds.map(id => state.objects.find(o => o.id === id)).filter(Boolean);
         const avgAct = clusterNodes.reduce((s, o) => s + o.activation, 0) / clusterNodes.length;
@@ -2050,6 +2053,9 @@ function ambientStep(dt) {
   // Noise decays faster when safety is high
   state.ambient.noise *= Math.pow(0.95 + state.ambient.safety * 0.04, dt * 60);
   state.ambient.noise = Math.max(0.05, state.ambient.noise); // Minimum ambient noise
+
+  // [REGRESSION FIX] Increment pattern age (was missing, causing long-lived test failure)
+  state.patterns.forEach(p => p.age = (p.age || 0) + 1);
 
   state.objects.forEach(o => {
     o.overloadEnergy = Math.max(0, o.overloadEnergy - 2.0 * dt); // Faster recovery

@@ -138,6 +138,8 @@ node tests/generate_qa_report.cjs
 node tests/generate_s3_model_comparison_report.cjs
 ```
 
+See the [CI Status Report (S6)](docs/mindgraphsim_s6_ci_status.yaml) for the specific physics constraints certified for v1.0.
+
 ### 2. Lab Reports
 
 Generate a unified YAML report of the current engine state, including system info and QA results.

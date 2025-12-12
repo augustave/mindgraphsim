@@ -29,7 +29,8 @@ const mockElement = {
     style: {},
     width: 800,
     height: 600,
-    getBoundingClientRect: () => ({ width: 800, height: 600 })
+    getBoundingClientRect: () => ({ width: 800, height: 600 }),
+    click: () => { }
 };
 
 global.window = {

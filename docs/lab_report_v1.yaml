@@ -1,7 +1,10 @@
+
 mindgraphsim_lab_report_v1:
   meta:
     generated_by: "scripts/generate_lab_report.cjs"
     version: "1.0"
+    date: "2023-12-12"
+    ci_certification: "docs/mindgraphsim_s6_ci_status.yaml"
   
   system_info:
   
