@@ -1,4 +1,3 @@
-// @ts-nocheck
 // ============================================
 // MindGraphSim v1.0 - Engine
 // Physics Config, Roles, Levin-style Patterns
