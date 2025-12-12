@@ -1,7 +1,7 @@
 // MindGraphSim - Visualization Adapter
 // Structured data for rendering
 
-import { SimulationState, CognitiveObject, Vector3, PatternAgent } from './types';
+import { SimulationState, Vector3 } from './types';
 import {
   PALETTE,
   COMPOSITION,
@@ -9,7 +9,6 @@ import {
   getObjectVisualState,
   densityToChar,
   getPatternColor,
-  getHealthColor,
 } from './theme';
 
 // ============================================
@@ -184,7 +183,7 @@ export class VisualizationAdapter {
 
       // Map 3D position to screen
       const screenX = spineCenter + obj.position.x * this.positionScale;
-      const screenY = this.viewportHeight / 2 + obj.position.y * this.positionScale;
+      // const screenY = this.viewportHeight / 2 + obj.position.y * this.positionScale; // Unused
 
       // Determine if in spine
       const distFromSpine = Math.abs(screenX - spineCenter);

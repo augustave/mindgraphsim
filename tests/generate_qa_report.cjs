@@ -81,7 +81,8 @@ const combos = [
     { p: 'open_neutral', f: 'frame_open_exploration', id: 'open_neutral' },
     { p: 'adhd_scatter_focus', f: 'frame_brainstorm_session', id: 'adhd_scatter_focus' },
     { p: 'autistic_sensory_sheet', f: 'frame_conflict_mediation', id: 'autistic_sensory_sheet' },
-    { p: 'meditative_slow_field', f: 'frame_meditative_field', id: 'meditative_slow_field' }
+    { p: 'meditative_slow_field', f: 'frame_meditative_field', id: 'meditative_slow_field' },
+    { p: 'autistic_intensity', f: 'frame_conflict_mediation', id: 'autistic_intensity' }
 ];
 
 let results = {};

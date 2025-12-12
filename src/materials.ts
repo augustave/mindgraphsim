@@ -1,28 +1,28 @@
 // MindGraphSim - Material Library
 // 31 materials across metals, minerals, and bio-elements
 
-import { MaterialType, MaterialCategory, IntrinsicVector, ExtendedVector } from './types';
+import { MaterialType, MaterialCategory, IntrinsicVector } from './types';
 
 export interface MaterialDefinition {
   id: MaterialType;
   category: MaterialCategory;
   name: string;
   behavior: string;
-  
+
   // Intrinsic 4D vector (N, U, C, S)
   vector: IntrinsicVector;
   scalar_weight: number;
-  
+
   // Physics modifiers
   friction: number;
   stickiness: number;
   overload_threshold: number;
-  
+
   // Light cone derivation
   cone_type: 'bacterial' | 'human' | 'extended';
   base_spatial_reach: number;
   base_temporal_reach: number;
-  
+
   // Defaults for extended dimensions
   default_effort: number;
   default_feasibility: number;

@@ -4,29 +4,30 @@
 export interface CognitiveProfile {
   id: string;
   name: string;
+  category?: string;
   description: string;
-  
+
   // Connectivity
   base_connectivity_gain: number;
-  
+
   // Sensory
   sensory_threshold: number;
   sensory_amplification: number;
-  
+
   // Overload
   overload_cut_fraction: number;
   recovery_half_life: number;
-  
+
   // Focus
   novelty_gain: number;
   drag_coefficient: number;
   activation_decay_base: number;
   anchor_required_mass: number;
-  
+
   // Physics modifiers
   gravitation_multiplier: number;
   repulsion_multiplier: number;
-  
+
   // Pattern behavior
   pattern_persistence_bonus: number;
   loop_detection_sensitivity: number;
@@ -36,6 +37,7 @@ export const PROFILES: Record<string, CognitiveProfile> = {
   general_mind: {
     id: 'general_mind',
     name: 'General Cognitive Field',
+    category: 'open',
     description: 'Neutral starting configuration for most users and experiments',
     base_connectivity_gain: 1.0,
     sensory_threshold: 0.8,
@@ -55,15 +57,16 @@ export const PROFILES: Record<string, CognitiveProfile> = {
   autistic_intensity: {
     id: 'autistic_intensity',
     name: 'Autistic Intensity',
+    category: 'neuro_lens',
     description: 'High sensory gain, tight local connectivity, strong pattern persistence',
-    base_connectivity_gain: 1.5,
+    base_connectivity_gain: 1.2, // Reduced from 1.5 (prevents energy explosion)
     sensory_threshold: 0.5,
     sensory_amplification: 1.8,
     overload_cut_fraction: 0.4,
     recovery_half_life: 30.0,
     novelty_gain: 0.8,
-    drag_coefficient: 0.3,
-    activation_decay_base: 0.7,
+    drag_coefficient: 0.4,       // Increased from 0.3 (adds stability)
+    activation_decay_base: 0.8,  // Increased from 0.7 (helps clear signal noise)
     anchor_required_mass: 0.4,
     gravitation_multiplier: 1.3,
     repulsion_multiplier: 1.5,
@@ -74,6 +77,7 @@ export const PROFILES: Record<string, CognitiveProfile> = {
   adhd_scatter_focus: {
     id: 'adhd_scatter_focus',
     name: 'ADHD Scatter-Focus',
+    category: 'neuro_lens',
     description: 'Fast switching, wide but shallow reach, periodic hyperfocus wells',
     base_connectivity_gain: 1.2,
     sensory_threshold: 0.7,
@@ -93,6 +97,7 @@ export const PROFILES: Record<string, CognitiveProfile> = {
   meditative_slow_field: {
     id: 'meditative_slow_field',
     name: 'Meditative Slow Field',
+    category: 'neuro_lens',
     description: 'Low noise, slow drift, wide and gentle attractors',
     base_connectivity_gain: 0.8,
     sensory_threshold: 0.9,

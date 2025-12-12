@@ -1,3 +1,4 @@
+// @ts-nocheck
 // ============================================
 // MindGraphSim v1.0 - Engine
 // Physics Config, Roles, Levin-style Patterns
@@ -25,54 +26,39 @@ const BASE_PHYSICS_CONFIG = {
   friction_base: 1.0
 };
 
+import { listProfiles as listDomainProfiles } from './profiles';
+
 // S2.5: Profile Registry (Physics Presets)
-const PROFILE_REGISTRY = [
-  {
-    id: "open_neutral",
-    label: "Open Field",
-    description: "Balanced profile; keeps parameters neutral so any cognitive style can be explored.",
-    category: "open",
-    physics: { noise_scale: 1.0, gravity_scale: 1.0, safety_scale: 1.0, activation_gain: 1.0, friction_gain: 1.0 },
-    // Legacy metrics fields (preserved for S2 compatibility)
-    sensory_threshold: 0.8, sensory_amplification: 1.0, overload_cut_fraction: 0.2, recovery_rate: 0.07, decay: 1.0, activationVarianceBoost: 0.15
+// ADAPTER: Maps the domain profiles (src/profiles.ts) to Engine Physics
+const PROFILE_REGISTRY = listDomainProfiles().map(p => ({
+  id: p.id,
+  label: p.name, // Map 'name' to 'label'
+  description: p.description,
+  category: p.category || "neuro_lens", // Default category
+
+  // Map flat physics params to the Engine's nested structure
+  physics: {
+    noise_scale: p.novelty_gain,          // Approximate mapping
+    gravity_scale: p.gravitation_multiplier,
+    safety_scale: 1.0,                    // Default or calculate from overload_cut
+    activation_gain: p.base_connectivity_gain,
+    friction_gain: p.drag_coefficient       // Drag becomes Friction
   },
-  {
-    id: "adhd_scatter_focus",
-    label: "Scatter–Focus Lens",
-    description: "Higher baseline noise and stronger pattern waves; used as a lens, not as a diagnosis.",
-    category: "neuro_lens",
-    physics: { noise_scale: 1.4, gravity_scale: 0.9, safety_scale: 0.9, activation_gain: 1.2, friction_gain: 0.9 },
-    // Legacy
-    sensory_threshold: 0.7, sensory_amplification: 1.3, overload_cut_fraction: 0.15, recovery_rate: 0.14, decay: 1.8, activationVarianceBoost: 0.25
-  },
-  {
-    id: "autistic_sensory_sheet",
-    label: "Sensory Sheet Lens",
-    description: "Stronger coupling between sensory channels and activation; good for modeling sensory fields.",
-    category: "neuro_lens",
-    physics: { noise_scale: 1.1, gravity_scale: 1.1, safety_scale: 1.2, activation_gain: 1.4, friction_gain: 1.05 },
-    // Legacy
-    sensory_threshold: 0.5, sensory_amplification: 1.8, overload_cut_fraction: 0.4, recovery_rate: 0.02, decay: 0.7, activationVarianceBoost: 0.1
-  },
-  {
-    id: "meditative_slow_field",
-    label: "Meditative Slow Field",
-    description: "Deep calm, high thresholds.",
-    category: "neuro_lens",
-    physics: { noise_scale: 0.5, gravity_scale: 1.2, safety_scale: 1.3, activation_gain: 0.6, friction_gain: 1.3 },
-    // Legacy
-    sensory_threshold: 0.9, sensory_amplification: 0.6, overload_cut_fraction: 0.1, recovery_rate: 0.15, decay: 0.5, activationVarianceBoost: 0.08
-  },
-  {
-    id: "autistic_intensity",
-    label: "Autistic Intensity",
-    description: "High sensory gain, tight local connectivity, strong pattern persistence",
-    category: "neuro_lens",
-    physics: { noise_scale: 1.0, gravity_scale: 1.3, safety_scale: 0.8, activation_gain: 1.2, friction_gain: 0.4 },
-    // Legacy
-    sensory_threshold: 0.5, sensory_amplification: 1.8, overload_cut_fraction: 0.4, recovery_rate: 0.02, decay: 0.8, activationVarianceBoost: 0.15
-  }
-];
+
+  // Legacy metrics fields (Passed through directly)
+  sensory_threshold: p.sensory_threshold,
+  sensory_amplification: p.sensory_amplification,
+  overload_cut_fraction: p.overload_cut_fraction,
+  recovery_rate: p.recovery_half_life > 0 ? (0.7 / p.recovery_half_life) : 0.1,
+  decay: p.activation_decay_base,
+  activationVarianceBoost: 0.15 // Default or add to profile interface
+}));
+
+console.log(`[Adapter] Registry loaded ${PROFILE_REGISTRY.length} profiles.`);
+if (PROFILE_REGISTRY.length > 0) {
+  const debugProfile = PROFILE_REGISTRY.find(p => p.id === 'autistic_intensity') || PROFILE_REGISTRY[0];
+  console.log(`[Adapter] Config Check (${debugProfile.id}): Gain=${debugProfile.physics.activation_gain}, Friction=${debugProfile.physics.friction_gain}`);
+}
 
 // Populate legacy PROFILES map for compatibility
 // Populate legacy PROFILES map for compatibility

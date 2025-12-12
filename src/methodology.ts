@@ -2,7 +2,7 @@
 // Chooses strategic posture and scores objects
 
 import { CognitiveObject, SimulationState, ExpandedFeatureVector } from './types';
-import { StrategicPosture, PostureWeights, getPosture, POSTURES } from './postures';
+import { StrategicPosture, getPosture, POSTURES } from './postures';
 
 export interface ScoredObject {
   id: string;

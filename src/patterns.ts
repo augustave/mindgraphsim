@@ -4,21 +4,16 @@
 import {
   SimulationState,
   CognitiveObject,
-  Pattern,
   PatternAgent,
-  PatternType,
   ClusterArchetype,
   ExpandedFeatureVector,
 } from './types';
 import { NeurodivergentProfile } from './profiles';
 
 export class PatternTracker {
-  private persistenceThreshold: number;
   private knownPatterns: Map<string, PatternAgent> = new Map();
 
-  constructor(persistenceThreshold: number = 10) {
-    this.persistenceThreshold = persistenceThreshold;
-  }
+  constructor() { }
 
   // ============================================
   // Main Detection
@@ -51,7 +46,7 @@ export class PatternTracker {
     for (const startId of state.objects.keys()) {
       if (globalVisited.has(startId)) continue;
 
-      const cycles = this.findCycles(startId, state, globalVisited);
+      const cycles = this.findCycles(startId, state);
 
       for (const cycle of cycles) {
         if (cycle.length < 3) continue;
@@ -87,7 +82,7 @@ export class PatternTracker {
     return loops;
   }
 
-  private findCycles(startId: string, state: SimulationState, globalVisited: Set<string>): string[][] {
+  private findCycles(startId: string, state: SimulationState): string[][] {
     const cycles: string[][] = [];
     const visited = new Set<string>();
     const stack = new Set<string>();

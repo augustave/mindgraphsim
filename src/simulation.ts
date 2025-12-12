@@ -7,7 +7,6 @@ import {
   SimulationState,
   Telemetry,
   Vector3,
-  MaterialType,
   ClusterArchetype,
   createEdge,
   createExpandedFeatureVector,
@@ -15,7 +14,7 @@ import {
   createCharge,
   createSensoryProfile,
 } from './types';
-import { NeurodivergentProfile, getProfile, PROFILES } from './profiles';
+import { NeurodivergentProfile, getProfile } from './profiles';
 import { MaterialLibrary, materialLibrary } from './materials';
 import { PhysicsEngine } from './physics';
 import { AmbientFieldEngine } from './ambient';
@@ -81,7 +80,7 @@ export class SimulationCore {
   addObject(partial: Partial<CognitiveObject> & { id: string }): CognitiveObject {
     if (this.state.objects.size >= this.config.max_objects) {
       console.warn(`Max objects (${this.config.max_objects}) reached`);
-      return this.state.objects.values().next().value;
+      return this.state.objects.values().next().value as CognitiveObject;
     }
 
     const materialType = partial.material_type ?? 'iron_metal';
@@ -140,7 +139,7 @@ export class SimulationCore {
   addEdge(partial: Partial<Edge> & { id: string; source_id: string; target_id: string }): Edge {
     if (this.state.edges.size >= this.config.max_edges) {
       console.warn(`Max edges (${this.config.max_edges}) reached`);
-      return this.state.edges.values().next().value;
+      return this.state.edges.values().next().value as Edge;
     }
 
     const edge = createEdge(partial);
@@ -266,9 +265,9 @@ export class SimulationCore {
     const avgSensory =
       objects.length > 0
         ? objects.reduce((sum, o) => {
-            const sp = o.sensory_profile;
-            return sum + (sp.sound + sp.color + sp.texture + sp.temperature) / 4;
-          }, 0) / objects.length
+          const sp = o.sensory_profile;
+          return sum + (sp.sound + sp.color + sp.texture + sp.temperature) / 4;
+        }, 0) / objects.length
         : 0;
 
     // Cluster archetypes count

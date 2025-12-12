@@ -4,7 +4,6 @@
 import {
   SimulationState,
   CognitiveObject,
-  Edge,
   Vector3,
   MaterialType,
   ExpandedFeatureVector,

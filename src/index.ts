@@ -8,36 +8,35 @@ export * from './types';
 
 // Profiles
 export {
-  NeurodivergentProfile,
   PROFILES,
   getProfile,
   listProfiles,
   createCustomProfile,
 } from './profiles';
+export type { NeurodivergentProfile, CognitiveProfile } from './profiles';
 
 // Strategic Postures
 export {
-  StrategicPosture,
-  PostureWeights,
   POSTURES,
   getPosture,
   listPostures,
   createCustomPosture,
   blendPostures,
 } from './postures';
+export type { StrategicPosture, PostureWeights } from './postures';
 
 // Materials
 export {
   MaterialLibrary,
-  MaterialDefinition,
   materialLibrary,
 } from './materials';
+export type { MaterialDefinition } from './materials';
 
 // Physics
 export {
   PhysicsEngine,
-  PhysicsConfig,
 } from './physics';
+export type { PhysicsConfig } from './physics';
 
 // Ambient Field
 export {
@@ -47,6 +46,8 @@ export {
 // Interaction Protocols
 export {
   InteractionProtocols,
+} from './protocols';
+export type {
   Intervention,
   ProtocolLevel,
   ProtocolLogEntry,
@@ -60,6 +61,8 @@ export {
 // Methodology Decider
 export {
   MethodologyDecider,
+} from './methodology';
+export type {
   ScoredObject,
   PostureRecommendation,
 } from './methodology';
@@ -72,6 +75,8 @@ export {
   computeRewardDelta,
   identifyHighPotential,
   analyzeRewardContribution,
+} from './reward';
+export type {
   RewardResult,
   SystemReward,
 } from './reward';
@@ -93,6 +98,8 @@ export {
 // Visualization
 export {
   VisualizationAdapter,
+} from './visualization';
+export type {
   RenderableObject,
   RenderableEdge,
   RenderablePattern,
@@ -102,19 +109,19 @@ export {
 // Simulation Core
 export {
   SimulationCore,
-  SimulationConfig,
 } from './simulation';
+export type { SimulationConfig } from './simulation';
 
 // ============================================
 // Factory Function
 // ============================================
 
-import { SimulationCore, SimulationConfig } from './simulation';
-import { VisualizationAdapter } from './visualization';
+import { SimulationCore as SimCore, SimulationConfig } from './simulation';
+import { VisualizationAdapter as VizAdapter } from './visualization';
 
 export interface MindGraphSimInstance {
-  sim: SimulationCore;
-  viz: VisualizationAdapter;
+  sim: SimCore;
+  viz: VizAdapter;
 }
 
 /**
@@ -123,8 +130,8 @@ export interface MindGraphSimInstance {
 export function createMindGraphSim(
   config?: Partial<SimulationConfig>
 ): MindGraphSimInstance {
-  const sim = new SimulationCore(config);
-  const viz = new VisualizationAdapter();
+  const sim = new SimCore(config);
+  const viz = new VizAdapter();
 
   return { sim, viz };
 }
@@ -133,12 +140,44 @@ export function createMindGraphSim(
 // Quick Start Helpers
 // ============================================
 
-import { CognitiveObject, MaterialType } from './types';
+// ============================================
+// Quick Start Helpers
+// ============================================
+
+import { listProfiles } from './profiles';
+
+// S2.5: Profile Registry (Physics Presets)
+// ADAPTER: Maps the domain profiles (src/profiles.ts) to Engine Physics
+export const PROFILE_REGISTRY = listProfiles().map(p => ({
+  id: p.id,
+  label: p.name, // Map 'name' to 'label'
+  description: p.description,
+  category: p.category || "neuro_lens", // Default category
+
+  // Map flat physics params to the Engine's nested structure
+  physics: {
+    noise_scale: p.novelty_gain,          // Approximate mapping
+    gravity_scale: p.gravitation_multiplier,
+    safety_scale: 1.0,                    // Default or calculate from overload_cut
+    activation_gain: p.base_connectivity_gain,
+    friction_gain: p.drag_coefficient
+  },
+
+  // Legacy metrics fields (Passed through directly)
+  sensory_threshold: p.sensory_threshold,
+  sensory_amplification: p.sensory_amplification,
+  overload_cut_fraction: p.overload_cut_fraction,
+  recovery_rate: 1 / p.recovery_half_life, // Convert half-life to rate if needed
+  decay: p.activation_decay_base,
+  activationVarianceBoost: 0.15 // Default or add to profile interface
+}));
+
+// import { CognitiveObject, MaterialType } from './types'; // Unused
 
 /**
  * Create a simple test graph with a few connected objects
  */
-export function createTestGraph(sim: SimulationCore): void {
+export function createTestGraph(sim: SimCore): void {
   // Core idea (gold anchor)
   sim.addObject({
     id: 'core_idea',
@@ -194,8 +233,8 @@ export function createTestGraph(sim: SimulationCore): void {
  * Run a quick simulation demo
  */
 export function runDemo(steps: number = 100): {
-  sim: SimulationCore;
-  viz: VisualizationAdapter;
+  sim: SimCore;
+  viz: VizAdapter;
   finalTelemetry: import('./types').Telemetry | undefined;
 } {
   const { sim, viz } = createMindGraphSim({
