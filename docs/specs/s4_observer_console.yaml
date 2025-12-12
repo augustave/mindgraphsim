@@ -1,0 +1,175 @@
+mindgraphsim_s4_observer_console:
+  phase: "S4 – Observer Console, Model Switcher & Replay"
+  engine_version_target: "v1.0-S4"
+  owner: "MindGraphSim Core Engine"
+  prerequisites:
+    - "S2 QA harness green (docs/mindgraphsim_s2_qa_run.yaml status: PASS for all profiles)."
+    - "S3 model comparison harness green (docs/mindgraphsim_s3_model_comparison.yaml generated)."
+    - "Winner model currently: 'high_damping' for conflict_resolution + stress_test.yaml."
+    - "PROFILE_REGISTRY and FRAME_REGISTRY live and stable."
+    - "MODEL_REGISTRY present with at least: baseline, pattern_coupled, high_damping."
+
+  north_star:
+    summary: >
+      Give the user a first-class in-browser Observer Console that exposes profiles, frames,
+      models, density status, and time-course behavior without needing to touch Node scripts.
+      The engine keeps behaving like a physics organism; the UI becomes a live lab panel.
+    success_criteria:
+      - "Profile, frame, and model are all switchable from the UI (no code edits needed)."
+      - "User can see, in one glance: density, overload status, active profile, frame, model."
+      - "User can record a short run, scrub through it, and visually compare states over time."
+      - "S2/S3 QA harnesses remain unchanged and still pass."
+
+  scope:
+    in_scope:
+      - "UI controls for Profile / Frame / Model switching."
+      - "Observer HUD consolidation (single place that shows metrics + context)."
+      - "Lightweight recording & replay for the main canvas (no giant logs; short segments)."
+      - "A basic Scenario Runner button for the S3 stress_test.yaml pipeline inside the browser."
+    out_of_scope:
+      - "Full-blown persistent logging of every run to disk."
+      - "Arbitrary external data integrations (e.g. live APIs)."
+      - "New physics models beyond what MODEL_REGISTRY already defines."
+
+  api_requirements:
+    # Extend engine public surface so UI can stay dumb and declarative
+    public_functions:
+      - name: "listModels"
+        description: "Return array of model ids + labels from MODEL_REGISTRY."
+        signature: "(): { id: string; label: string; description?: string }[]"
+      - name: "applyModel"
+        description: "Switch active model variant at runtime using MODEL_REGISTRY id."
+        signature: "(id: string) => void"
+      - name: "getCurrentContext"
+        description: "Already exists; ensure it includes profileId, frameId, modelId, density, overloads, patterns."
+        must_include:
+          - "profileId"
+          - "frameId"
+          - "modelId"
+          - "metrics.patternDensity"
+          - "metrics.densityStatus"
+          - "overloads"
+          - "patternCount"
+      - name: "runScenarioStep"
+        description: >
+          Allow S3-style scenarios (like stress_test.yaml) to be stepped from the browser.
+          Simple wrapper that applies any events scheduled for the current step.
+        signature: "(scenarioId: string, step: number) => void"
+
+  ux_surface:
+    layout:
+      # keep consistent with current full-screen graph
+      left_panel:
+        sections:
+          - id: "profiles"
+            controls:
+              - "Profile selector (dropdown; values from listProfiles())"
+          - id: "frames"
+            controls:
+              - "Frame selector (dropdown; values from listFrames())"
+          - id: "models"
+            controls:
+              - "Model selector (dropdown; values from listModels())"
+          - id: "scenarios"
+            controls:
+              - "Run 'Conflict Stress Test' button (uses S3 stress_test pipeline in-browser)"
+      center_canvas:
+        description: "Existing MindGraphSim canvas; stays dominant visual surface."
+      right_panel:
+        sections:
+          - id: "observer_hud"
+            elements:
+              - "Current profile / frame / model chips"
+              - "Density numeric value + CALM/BUSY/SATURATED badge"
+              - "Overloads counter (0 default; highlight if > 0)"
+              - "Pattern count (with soft warning if > 25)"
+          - id: "replay_controls"
+            elements:
+              - "Record button (captures next N steps, e.g. 300)."
+              - "Stop / Save recording."
+              - "Scrubber timeline (0..N) to scrub through captured states."
+              - "Play / Pause playback at reduced speed (e.g. 0.5x)."
+
+  recording_system:
+    goals:
+      - "Capture enough state to meaningfully replay motion and pattern shifts."
+      - "Avoid huge memory usage and complex persistence."
+    design:
+      buffer:
+        type: "ring_buffer"
+        capacity_steps: 300   # ~5 seconds at 60 FPS, but can be tuned
+      stored_per_step:
+        - "shallow copy of state.objects (id, x, y, material, activation, energy)."
+        - "pattern summary (pattern ids + type + key node ids)."
+        - "metrics: density, densityStatus, overloads, patternCount."
+      api:
+        - name: "startRecording"
+          effect: "Clear buffer; begin pushing snapshots each simulation step."
+        - name: "stopRecording"
+          effect: "Stop pushing; freeze buffer."
+        - name: "getRecordingMetadata"
+          effect: "Return number of steps, density min/max, overload flags."
+        - name: "getRecordingFrame"
+          effect: "Return snapshot at index for replay (used by scrubber)."
+      implementation_notes:
+        - "Recording is local to current tab; no file saving."
+        - "Replay uses a read-only mode; physics loop runs paused while scrubbing."
+
+  scenario_runner:
+    goal:
+      - "Mirror the S3 stress_test.yaml behavior from inside the browser for demo purposes."
+    behavior:
+      - "Expose a single 'Run Conflict Stress Test' button in left panel."
+      - "When clicked:"
+        - "Reset scene to conflict_resolution."
+        - "Apply open_neutral profile and frame_open_exploration frame."
+        - "Apply model currently selected in Model dropdown."
+        - "Step simulation for 500 steps, applying the same events as stress_test.yaml phases."
+        - "During run, auto-record the whole sequence into the recording buffer."
+      - "After run:"
+        - "Jump UI to Replay panel with the scrubber initialized for this recording."
+        - "Highlight resulting density curve and overloads (if any) in HUD."
+    constraints:
+      - "Do not depend on Node harness or file I/O; scenario is compiled into JS or re-encoded as a local data structure."
+
+  tasks:
+    - id: "S4-T1_model_switcher_api"
+      title: "Add listModels/applyModel + context.modelId"
+      type: "engine"
+      acceptance:
+        - "Calling listModels() returns at least 3 models."
+        - "applyModel('high_damping') changes behavior under stress_test visibly (slower motion)."
+        - "getCurrentContext().modelId always matches last applied model."
+    - id: "S4-T2_observer_hud_consolidation"
+      title: "Observer HUD showing profile/frame/model + metrics"
+      type: "ui"
+      acceptance:
+        - "HUD chips correctly reflect active profile, frame, model."
+        - "Density and densityStatus match values from getCurrentContext().metrics."
+        - "Overloads counter updates live during simulation."
+    - id: "S4-T3_recording_and_replay"
+      title: "Ring-buffer recording with scrubber playback"
+      type: "engine+ui"
+      acceptance:
+        - "User can record a run, then scrub through positions without the live physics fighting."
+        - "Replay does not mutate underlying engine state permanently when stopped."
+        - "Recording buffer is capped (no unbounded memory growth)."
+    - id: "S4-T4_scenario_runner_button"
+      title: "In-browser Conflict Stress Test runner"
+      type: "engine+ui"
+      acceptance:
+        - "Button runs a 500-step stress sequence that qualitatively matches S3 stress_test.yaml behavior."
+        - "Recording auto-starts and is accessible through Replay panel."
+        - "If model is high_damping, final density is lower than baseline in same run."
+
+  qa_and_guardrails:
+    dependencies:
+      - "Before merging S4 changes, re-run S2 QA (tests/generate_qa_report.cjs --write)."
+      - "Re-run S3 comparison (tests/generate_s3_model_comparison_report.cjs --write)."
+    required_status:
+      - "mindgraphsim_s2_qa_run: all profiles PASS."
+      - "mindgraphsim_s3_model_comparison: at least one model PASS; winner_model_id must not be null."
+    non_regression:
+      - "Do not change underlying QA constraints (max_density, max_patterns, max_overloads)."
+      - "Do not alter S2/S3 YAML report schema."
+      - "Observer Console features must be strictly additive: no breaking of existing public APIs."

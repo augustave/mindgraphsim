@@ -1,0 +1,196 @@
+manual_metadata:
+  title: "MindGraphSim Core Engine PRD"
+  version: "0.4"
+  last_updated: "2025-12-06"
+  owner: "MindGraphSim Studio"
+  status: "draft"
+
+product_summary:
+  one_liner: "MindGraphSim is a cognitive engine that simulates how ideas move, combine, and stabilize over time."
+  elevator_pitch: >
+    MindGraphSim models attention, memory, and emotion as one continuous field.
+    It lets users observe and manipulate the physics of thought: how concepts attract,
+    repel, merge, fracture, and form stable patterns.
+  origin_story: >
+    MindGraphSim began as an attempt to describe one autistic sensory life in the
+    language of physics. By stress testing on intense perception and atypical
+    connectivity, the engine became general enough to describe many kinds of minds.
+
+positioning:
+  category_label: "Cognitive dynamics engine"
+  alt_labels:
+    - "Thought simulation engine"
+    - "Ambient thinking model"
+  primary_claim: "A general-purpose engine for modeling cognitive dynamics for any mind."
+  audience:
+    primary:
+      - "Cognitive science and AI researchers"
+      - "Designers and product teams working on complex systems"
+      - "Therapists, coaches, and educators"
+      - "Artists and writers exploring idea physics"
+    specialist:
+      - "Neurodivergent communities"
+      - "Clinical researchers"
+      - "Experimental HCI and ambient AI labs"
+  tagline_public: "A simulation engine for how ideas move."
+  tagline_alt:
+    - "Map the physics of your thinking."
+    - "See how attention, memory, and emotion move together."
+
+autism_messaging:
+  include_in_tagline: false
+  include_in_category_label: false
+  placement:
+    founder_story: true
+    deep_dive_docs: true
+    specialist_kits: true
+  founder_story_block: >
+    MindGraphSim is rooted in lived autistic experience: porous body–world
+    boundaries, sensory-rich concepts, and intense intrinsic connectivity.
+    These edge conditions were used as a stress test for the engine, so that
+    any mind that sits inside the same physics can be modeled, not only autistic ones.
+  framing:
+    - "Originally inspired by autistic sensory life."
+    - "Stress tested on atypical perception and cognition."
+    - "Built from edge-case minds, usable by any mind."
+  phrases_to_avoid:
+    - "engine for autistic people"
+    - "for autistic thinkers" as the main promise
+    - "autism-only tool"
+  preferred_phrases:
+    - "Inspired by autistic sensory life, generalized for many kinds of minds."
+    - "Uses intense perception as a stress test for the model."
+    - "Profiles for autistic and other neurotypes available in advanced mode."
+
+experience_rings:
+  ring_1_public_face:
+    description: "What investors, general users, and press see first."
+    visible_elements:
+      - neutral abstract graphs and flows
+      - emphasis on idea dynamics and cognitive fields
+    language:
+      focus_on:
+        - "how ideas move"
+        - "energy of attention"
+        - "behavior of concepts"
+        - "simulation of thought"
+      avoid:
+        - "for autistic people" as a category frame
+  ring_2_xray_mode:
+    description: "Deeper sections in deck, docs, or site."
+    blocks:
+      - title: "Origin"
+        copy: >
+          MindGraphSim was first built to explain one autistic sensory life
+          in physics language. If the engine can hold that level of intensity
+          and non-linearity, it can handle more ordinary patterns with ease.
+      - title: "Why edge cases first"
+        copy: >
+          Edge-case perception exposes where models break. By starting from
+          atypical minds, MindGraphSim is less likely to collapse back to
+          an average user who does not exist in real life.
+  ring_3_specialist_kits:
+    description: "Named profiles and kits for specific communities."
+    kits:
+      - id: "autistic_intensity_kit"
+        label: "Autistic Intensity Kit"
+        visibility: "advanced"
+        audience:
+          - "autistic adults and teens"
+          - "clinicians and researchers"
+        note: "Market as a profile pack for the general engine, not as the engine itself."
+      - id: "adhd_orbit_kit"
+        label: "ADHD Orbit Kit"
+        visibility: "advanced"
+      - id: "meditative_field_kit"
+        label: "Meditative Field Kit"
+        visibility: "advanced"
+      - id: "clinical_exploration_pack"
+        label: "Clinical Exploration Pack"
+        visibility: "specialist"
+
+profiles_and_modes:
+  base_engine_is_general: true
+  default_profile: "general_mind"
+  profiles:
+    - id: "general_mind"
+      label: "General Cognitive Field"
+      description: "Neutral starting configuration for most users and experiments."
+      default: true
+    - id: "autistic_intensity"
+      label: "Autistic Intensity Profile"
+      description: >
+        High sensory gain, tight local connectivity, strong pattern persistence.
+        Offered as one profile among many, not the identity of the engine.
+      marketing_surface_level: "advanced docs, specialist pages, workshops"
+    - id: "adhd_scatter_focus"
+      label: "ADHD Scatter-Focus Profile"
+      description: "Fast switching, wide but shallow reach, periodic hyperfocus wells."
+    - id: "meditative_slow_field"
+      label: "Meditative Slow Field Profile"
+      description: "Low noise, slow drift, wide and gentle attractors."
+
+constraints:
+  market_messaging:
+    must:
+      - "Present MindGraphSim as a general-purpose cognitive dynamics engine."
+      - "Place autism in founder story, deep dives, and profiles, not in main tagline."
+      - "Highlight autistic origin as a strength and source of depth."
+    must_not:
+      - "Use 'engine for autistic people' as a tagline or category."
+      - "Position MindGraphSim as an autism-only tool."
+      - "Suggest non-autistic users are secondary or unwelcome."
+  ux_copy_rules:
+    hero_section:
+      avoid_terms:
+        - "autistic"
+        - "neurodivergent"
+      focus_terms:
+        - "ideas"
+        - "patterns"
+        - "fields"
+        - "energy"
+        - "attention"
+    about_section:
+      required_elements:
+        - "brief founder story with autistic origin"
+        - "statement that the engine is general-purpose"
+        - "explanation of why edge cases improved the model for everyone"
+
+implementation_notes_for_agents:
+  messaging_layer:
+    config_flags:
+      allow_autism_terms_in_hero: false
+      allow_autism_terms_in_about: true
+      allow_autism_terms_in_profiles: true
+  content_routing:
+    rules:
+      - condition: "page_type == 'landing_hero'"
+        show_blocks:
+          - "product_summary.one_liner"
+          - "positioning.tagline_public"
+        hide_blocks:
+          - "autism_messaging.founder_story_block"
+          - "ring_3_specialist_kits"
+      - condition: "page_type == 'about'"
+        show_blocks:
+          - "autism_messaging.founder_story_block"
+          - "ring_2_xray_mode.blocks"
+      - condition: "page_type == 'specialist_kits'"
+        show_blocks:
+          - "ring_3_specialist_kits.kits"
+          - "profiles_and_modes.profiles"
+
+success_criteria:
+  perception_tests:
+    - id: "gen_public_survey"
+      goal: "Most respondents describe MindGraphSim as 'general tool for thinking / modeling thought', not as 'tool only for autistic people'."
+      target_metric: "≥ 80% classify it as general-purpose."
+    - id: "autistic_community_check"
+      goal: "Autistic users recognize themselves in the origin story and specialist kits without feeling tokenized or sidelined."
+      target_metric: "Qualitative feedback positive in at least 70% of pilot interviews."
+  messaging_regression_tests:
+    - id: "tagline_scan"
+      rule: "No production tagline contains the phrase 'engine for autistic people'."
+    - id: "hero_copy_scan"
+      rule: "Hero sections avoid framing the engine as autism-only while still allowing deep pages to speak plainly."

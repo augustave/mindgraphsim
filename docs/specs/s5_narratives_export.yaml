@@ -1,0 +1,71 @@
+phase: "S5 – Narratives & Export"
+engine_version_target: "v1.0-S5"
+owner: "MindGraphSim Core Engine"
+status: "PLANNED"
+
+context:
+  prior_phases:
+    s4_observer_console:
+      summary: "Observer Console, Model Switcher, Scenario Runner, Recorder/Replay complete."
+      artifacts:
+        - "Recorder/ReplaySystem in mgs-engine.js"
+        - "Observer Console HUD in standalone-demo.html"
+        - "tests/test_s4_requirements.cjs"
+
+goals:
+  primary:
+    - "Make simulation runs explainable via text narratives."
+    - "Make runs portable via JSON export."
+    - "Improve discoverability of Frames/Profiles via an in-UI catalog."
+    - "Unify QA outputs into a single 'Lab Report'."
+
+tasks:
+  - id: S5-T1_state_export
+    name: "State Export (JSON)"
+    description: "Add 'Export Run' button to save last recorded run."
+    requirements:
+      - "Output JSON structure: { metadata: {...}, schemaVersion: '1.0', frames: [...], metrics: {...} }"
+      - "Metadata includes: date, profileId, modelId, frameId, regimeId, scenarioName."
+      - "Must work from the Recorder buffer (ReplaySystem.liveBackup or Recorder.buffer)."
+      - "Triggered via UI button in Toolbar or Observer Console."
+  
+  - id: S5-T2_text_narrative_stub
+    name: "Text Narrative Stub"
+    description: "Generate a plain-language summary of a run."
+    requirements:
+      - "Pure JS implementation (no external LLM calls yet)."
+      - "Analyze metrics: peak density, dominant pattern types, overload count."
+      - "Template example: 'The session began calm but reached high density (2.8) with 3 overloads. Dominant pattern: Loop.'"
+      - "Display in a new 'Report' modal or panel section."
+
+  - id: S5-T3_frame_catalog_view
+    name: "Frame Catalog View"
+    description: "In-UI catalog listing all Frames/Profiles."
+    requirements:
+      - "Read from PROFILE_REGISTRY and FRAME_REGISTRY."
+      - "Display grid or list of cards with: Name, Description, key params (e.g., 'High Noise')."
+      - "Clicking a card applies that Profile/Frame."
+      - "Optional: Placeholder screenshots for each."
+
+  - id: S5-T4_pipeline_glue
+    name: "Pipeline Glue (Lab Report)"
+    description: "Unified script to bundle S2, S3, and S4 outputs."
+    requirements:
+      - "Script: `scripts/generate_lab_report.js` (or similar)."
+      - "Inputs: `docs/mindgraphsim_s2_qa_run.yaml`, `docs/mindgraphsim_s3_model_comparison.yaml`."
+      - "Output: `docs/lab_report_v1.yaml` containing sections for Regression, ModelFit, and SystemHealth."
+
+ui_spec:
+  export_button:
+    location: "Toolbar or Replay Controls"
+    icon: "Download/Save"
+  catalog_modal:
+    trigger: "New 'Catalog' button in Console or Top Bar."
+    content: "Tabs for Profiles / Frames."
+  narrative_panel:
+    location: "Below Observer Console or in a 'Run Summary' modal after replay."
+
+qa_requirements:
+  - "Exported JSON must be valid and parsable."
+  - "Narrative generation must not crash on empty buffers."
+  - "Lab Report script must successfully merge existing YAMLs."

@@ -1,0 +1,23 @@
+mindgraphsim_s3_model_comparison:
+  engine_version: "v0.9-S3"
+  scene_id: "conflict_resolution"
+  profile_id: "open_neutral"
+  input_script: "stress_test.yaml"
+  models_tested: ["baseline", "pattern_coupled", "high_damping"]
+  winner_model_id: "pattern_coupled"
+  results:
+    baseline:
+      density: 2.25
+      patterns: 18
+      overloads: 0
+      status: PASS
+    pattern_coupled:
+      density: 1.88
+      patterns: 15
+      overloads: 0
+      status: PASS
+    high_damping:
+      density: 2.13
+      patterns: 17
+      overloads: 0
+      status: PASS

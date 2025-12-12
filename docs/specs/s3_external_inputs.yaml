@@ -1,0 +1,102 @@
+mindgraphsim_s3_spec:
+  phase: "S3 – External Inputs & Multi-Model Comparison"
+  engine_version_target: "v0.9-S3"
+  owner: "MindGraphSim Core Engine"
+
+  goals:
+    - "Introduce a minimal external input adapter for controlled perturbations."
+    - "Run multiple engine variants against identical input scripts."
+    - "Select the best-behaving model under stress using clear metrics."
+
+  constraints:
+    hard:
+      - "Must not break S2 QA: all S2.5 harness tests must still PASS."
+      - "No changes to public API already used by UI (loadScene, applyProfile, applyFrame)."
+      - "External inputs must be representable as data (JSON/YAML), not hard-coded in engine."
+    soft:
+      - "Prefer reusing existing QA harness patterns (Node + DOM mocks)."
+
+  tasks:
+    - id: "S3-T1"
+      name: "External Input Adapter"
+      status: "planned"
+      objective: "Allow scripted perturbations of ambient + node-level parameters."
+      deliverables:
+        - "engine: input adapter that can read a list of events and apply them per step."
+        - "data: one canonical input script (e.g., conflict_resolution_stress_test.yaml)."
+      spec:
+        input_event:
+          fields:
+            - { name: "at_step", type: "integer | [start,end]", desc: "Step or range when the event applies." }
+            - { name: "target", type: "enum", values: ["ambient", "node", "pattern_type"], desc: "What is affected." }
+            - { name: "selector", type: "string", desc: "Node id, material, or pattern kind, depending on target." }
+            - { name: "channel", type: "string", desc: "Property to adjust (noise, safety, activation, energy, gravityStrength, etc.)." }
+            - { name: "mode", type: "enum", values: ["add", "multiply", "set"], desc: "How to apply magnitude." }
+            - { name: "magnitude", type: "number", desc: "Delta/scale/value depending on mode." }
+        harness:
+          function: "runScenario(sceneId, profileId, frameId, inputScript)"
+          behavior:
+            - "Load scene, apply profile + frame."
+            - "For each step: apply events for that step before physics pipeline."
+            - "Record summary metrics."
+
+    - id: "S3-T2"
+      name: "Multi-Model Pool & Comparison"
+      status: "planned"
+      objective: "Run several engine variants under the same input script and compare behavior."
+      deliverables:
+        - "engine: MODEL_REGISTRY describing variants (baseline, pattern_coupled, high_damping, etc.)."
+        - "harness: compareModels(sceneId, profileId, frameId, inputScript, steps)."
+      spec:
+        model_variant:
+          fields:
+            - { name: "id", type: "string" }
+            - { name: "label", type: "string" }
+            - { name: "physics_overrides", type: "object", desc: "Optional tweaks to BASE_PHYSICS_CONFIG/profile." }
+            - { name: "pattern_feedback", type: "object", desc: "Coefficients for pattern influence (e.g., loop_gain, cluster_gain)." }
+        compareMetrics:
+          per_model:
+            - "max_density"
+            - "avg_density"
+            - "max_overloads"
+            - "pattern_count_peak"
+            - "avg_pattern_lifetime"
+          constraints:
+            - "max_density <= 5.0"
+            - "max_overloads == 0"
+            - "pattern_count_peak <= 40"
+
+    - id: "S3-T3"
+      name: "Best-Fit Selector & QA Harness v2"
+      status: "planned"
+      objective: "Automate selection of best-behaving model and log results as YAML."
+      deliverables:
+        - "tests/generate_s3_model_comparison_report.cjs"
+        - "docs/mindgraphsim_s3_model_comparison.yaml"
+      spec:
+        selection_rule:
+          order:
+            - "Reject any model violating hard constraints."
+            - "Among remaining, minimize max_overloads (should be 0 for all)."
+            - "Then minimize max_density."
+            - "Then minimize avg_pattern_lifetime variance (prefer stable patterns)."
+        yaml_output:
+          fields:
+            - "engine_version"
+            - "commit_hash"
+            - "scene_id"
+            - "profile_id"
+            - "frame_id"
+            - "input_script_id"
+            - "models_tested"
+            - "results[model_id]"
+            - "winner_model_id"
+
+  qa:
+    inheritance:
+      - "S2.5 QA harness must be run after S3 changes."
+      - "No S3 feature is 'done' if S2 tests regress."
+    new_tests:
+      - "Unit: input adapter applies events correctly."
+      - "Unit: model selection logic picks expected winner in controlled synthetic scenario."
+      - "Harness: generate_s3_model_comparison_report.cjs runs without crashes on dev machine."

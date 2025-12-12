@@ -1,0 +1,47 @@
+# S3 Stress Test Scenario
+# Applies progressive stress to the system via noise and gravity
+
+metadata:
+  name: "Conflict Resolution Stress Test"
+  description: "Ramps up noise and gravity to test overload thresholds and recovery."
+
+events:
+  # Phase 1: Baseline (Steps 0-99)
+  # No events.
+
+  # Phase 2: Moderate Disturbance (Step 100)
+  - at_step: 100
+    target: "ambient"
+    channel: "noise.base_strength"
+    mode: "set"
+    magnitude: 0.35  # 2x baseline
+
+  # Phase 3: Gravity Flux (Step 200)
+  - at_step: 200
+    target: "ambient"
+    channel: "gravity.strength"
+    mode: "multiply"
+    magnitude: 1.5   # 50% stronger gravity to clump nodes
+
+  # Phase 4: Specific Node Stress (Step 300)
+  # Target 'Anchor' nodes to withstand stress
+  - at_step: 300
+    target: "node"
+    selector: "mat:metal"  # Metal/Anchors
+    channel: "mass"
+    mode: "multiply"
+    magnitude: 2.0   # Heavies get heavier
+
+  # Phase 5: High Stress Peak (Step 400)
+  - at_step: 400
+    target: "ambient"
+    channel: "noise.base_strength"
+    mode: "set"
+    magnitude: 0.8   # Extreme noise
+
+  # Phase 6: Recovery (Step 450)
+  - at_step: 450
+    target: "ambient"
+    channel: "noise.base_strength"
+    mode: "set"
+    magnitude: 0.15  # Back to baseline

@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MindGraphSim v0.7</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: 'Space Mono', 'Courier New', monospace;
+        background: #1a1a1a;
+        color: #b0b0b0;
+        min-height: 100vh;
+        padding: 2rem;
+      }
+
+      h1 {
+        color: #ff3333;
+        margin-bottom: 1rem;
+        font-size: 2rem;
+      }
+
+      h2 {
+        color: #dfff00;
+        margin: 1.5rem 0 0.5rem;
+        font-size: 1.2rem;
+      }
+
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+      }
+
+      .controls {
+        display: flex;
+        gap: 1rem;
+        margin-bottom: 1rem;
+        flex-wrap: wrap;
+      }
+
+      button {
+        background: #0033a0;
+        color: #fff;
+        border: none;
+        padding: 0.5rem 1rem;
+        font-family: inherit;
+        cursor: pointer;
+        transition: background 0.2s;
+      }
+
+      button:hover {
+        background: #0044cc;
+      }
+
+      button.active {
+        background: #ff3333;
+      }
+
+      select {
+        background: #333;
+        color: #fff;
+        border: 1px solid #666;
+        padding: 0.5rem;
+        font-family: inherit;
+      }
+
+      .stats {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 1rem;
+        margin-bottom: 1rem;
+      }
+
+      .stat {
+        background: #222;
+        padding: 1rem;
+        border-left: 3px solid #ff3333;
+      }
+
+      .stat-label {
+        font-size: 0.75rem;
+        color: #666;
+        text-transform: uppercase;
+      }
+
+      .stat-value {
+        font-size: 1.5rem;
+        color: #dfff00;
+      }
+
+      #ascii-view {
+        background: #0d0d0d;
+        padding: 1rem;
+        font-size: 10px;
+        line-height: 1.2;
+        white-space: pre;
+        overflow-x: auto;
+        border: 1px solid #333;
+      }
+
+      #log {
+        background: #0d0d0d;
+        padding: 1rem;
+        max-height: 200px;
+        overflow-y: auto;
+        font-size: 0.75rem;
+        border: 1px solid #333;
+      }
+
+      .log-entry {
+        margin-bottom: 0.25rem;
+      }
+
+      .log-step {
+        color: #666;
+      }
+
+      .log-overload {
+        color: #ff3333;
+      }
+
+      .log-recovery {
+        color: #00ff88;
+      }
+
+      .log-pattern {
+        color: #dfff00;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>MindGraphSim v0.7</h1>
+      <p>Physics-based cognitive simulation for neurodivergent thought</p>
+
+      <h2>Controls</h2>
+      <div class="controls">
+        <button id="btn-step">Step</button>
+        <button id="btn-run">Run 10</button>
+        <button id="btn-run-100">Run 100</button>
+        <button id="btn-reset">Reset</button>
+        <button id="btn-noise">Inject Noise</button>
+        <select id="profile-select">
+          <option value="neurotypical_baseline">Neurotypical Baseline</option>
+          <option value="autistic_intense_connectivity" selected>Autistic Intense Connectivity</option>
+          <option value="adhd_scatter_focus">ADHD Scatter Focus</option>
+          <option value="twice_exceptional">2E Twice Exceptional</option>
+        </select>
+      </div>
+
+      <h2>Telemetry</h2>
+      <div class="stats">
+        <div class="stat">
+          <div class="stat-label">Step</div>
+          <div class="stat-value" id="stat-step">0</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Objects</div>
+          <div class="stat-value" id="stat-objects">0</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Patterns</div>
+          <div class="stat-value" id="stat-patterns">0</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Overloads</div>
+          <div class="stat-value" id="stat-overloads">0</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Kinetic Energy</div>
+          <div class="stat-value" id="stat-ke">0</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Activation</div>
+          <div class="stat-value" id="stat-activation">0</div>
+        </div>
+      </div>
+
+      <h2>ASCII View</h2>
+      <div id="ascii-view"></div>
+
+      <h2>Event Log</h2>
+      <div id="log"></div>
+    </div>
+
+    <script type="module" src="/src/demo.ts"></script>
+  </body>
+</html>

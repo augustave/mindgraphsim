@@ -1,0 +1,188 @@
+mindgraphsim_s3_model_comparison_agent:
+  phase: "S3 – External Inputs & Multi-Model Comparison"
+  engine_version: "v0.9-S3"
+  owner: "MindGraphSim Core Engine"
+  role:
+    summary: >
+      Maintain and operate the S3 model comparison harness. Given a scene, a
+      profile, and a scripted external input scenario, run multiple engine
+      variants, compare their behavior under stress, and emit a YAML report
+      that selects a winner model.
+    responsibilities:
+      - Keep MODEL_REGISTRY consistent with engine expectations.
+      - Keep stress-test scenarios in sync with engine channels.
+      - Ensure S2 QA harness passes before any S3 comparison run.
+      - Never weaken QA constraints without an explicit new spec.
+
+  dependencies:
+    engine:
+      path: "mgs-engine.js"
+      notes:
+        - "Must already expose MODEL_REGISTRY and model selector hook."
+        - "Must expose: loadScene, applyProfile, applyFrame, integratePhysics, detectPatterns, updateHUDMetrics."
+    qa_harness_s2:
+      path: "tests/generate_qa_report.cjs"
+      report: "docs/mindgraphsim_s2_qa_run.yaml"
+      requirement: "S2 QA MUST be PASS before S3 comparison runs."
+    s3_harness:
+      path: "tests/generate_s3_model_comparison_report.cjs"
+      report: "docs/mindgraphsim_s3_model_comparison.yaml"
+    scenarios:
+      directory: "tests/scenarios"
+      default_script: "stress_test.yaml"
+
+  model_registry:
+    location: "MODEL_REGISTRY in mgs-engine.js"
+    current_models:
+      - id: "baseline"
+        description: "Reference model; tuned to S2 density and overload constraints."
+      - id: "pattern_coupled"
+        description: "Variant where pattern agents couple more strongly into physics."
+      - id: "high_damping"
+        description: "Variant with increased damping for more sluggish motion."
+    rules:
+      - "Do not remove or rename 'baseline' without a new PRD."
+      - "New models must be added via MODEL_REGISTRY and included in models_tested array."
+      - "All models must support the same public engine API."
+
+  input_script_format:
+    example_file: "tests/scenarios/stress_test.yaml"
+    description: >
+      YAML script that applies time-indexed perturbations to ambient fields and
+      node parameters. Used to probe model behavior under controlled stress.
+    schema:
+      root:
+        metadata:
+          name: "string"
+          description: "string"
+        events:
+          - at_step: "integer (simulation step index)"
+            target: "ambient | node"
+            channel: "string path (e.g. 'noise.base_strength', 'gravity.strength', 'mass')"
+            mode: "set | multiply"
+            magnitude: "number"
+            selector:
+              optional: "node selector if target == 'node' (e.g. 'mat:metal')"
+    default_scenario:
+      name: "Conflict Resolution Stress Test"
+      phases:
+        - phase: "Baseline"
+          range: "0–99"
+          effect: "No events; measure baseline behavior."
+        - phase: "Moderate Disturbance"
+          step: 100
+          effect: "Increase noise.base_strength to 0.35."
+        - phase: "Gravity Flux"
+          step: 200
+          effect: "Multiply gravity.strength by 1.5."
+        - phase: "Specific Node Stress"
+          step: 300
+          effect: "Multiply mass of metal/anchor nodes by 2.0."
+        - phase: "High Stress Peak"
+          step: 400
+          effect: "Set noise.base_strength to 0.8."
+        - phase: "Recovery"
+          step: 450
+          effect: "Return noise.base_strength to baseline 0.15."
+
+  comparison_config:
+    scene_id: "conflict_resolution"
+    profile_id: "open_neutral"
+    frame_id: "frame_open_exploration"
+    models_tested: ["baseline", "pattern_coupled", "high_damping"]
+    steps: 500
+    constraints:
+      max_density: 5.0
+      max_patterns: 30
+      max_overloads: 0
+    metrics:
+      - id: "density"
+        source: "state.metrics.patternDensity"
+      - id: "patterns"
+        source: "state.patterns.length"
+      - id: "overloads"
+        source: "state.overloads"
+
+  scoring_logic:
+    status_rules:
+      - "If overloads > 0 → status = FAIL."
+      - "If density > max_density → status = FAIL."
+      - "If patternCount > max_patterns → status = FAIL."
+      - "Otherwise → status = PASS."
+    winner_selection:
+      precondition: "At least one model has status PASS."
+      steps:
+        - "Filter to models with status == PASS."
+        - "Sort by density ascending."
+        - "If tie on density, sort by patterns ascending."
+        - "If still tied, prefer 'baseline' unless a new spec overrules this."
+      output:
+        winner_model_id: "id of best model"
+        rationale:
+          - "Lowest density under stress (more spacious cognitive field)."
+          - "Lower or equal pattern count (fewer clutter artifacts)."
+          - "No overloads observed."
+
+  harness_execution:
+    script: "tests/generate_s3_model_comparison_report.cjs"
+    cli_interface:
+      flags:
+        - flag: "--scene"
+          default: "conflict_resolution"
+          usage: "Scene id for loadScene."
+        - flag: "--profile"
+          default: "open_neutral"
+          usage: "Profile id passed to applyProfile."
+        - flag: "--frame"
+          default: "frame_open_exploration"
+          usage: "Frame id passed to applyFrame."
+        - flag: "--steps"
+          default: 500
+          usage: "Number of integration steps."
+        - flag: "--scenario"
+          default: "tests/scenarios/stress_test.yaml"
+          usage: "YAML file describing external input events."
+        - flag: "--write"
+          default: false
+          usage: "Write report to docs/ instead of stdout."
+    example_commands:
+      - "node tests/generate_s3_model_comparison_report.cjs"
+      - "node tests/generate_s3_model_comparison_report.cjs --steps 750 --scenario tests/scenarios/stress_test.yaml"
+      - "node tests/generate_s3_model_comparison_report.cjs --write"
+
+  yaml_report_contract:
+    path_default: "docs/mindgraphsim_s3_model_comparison.yaml"
+    schema:
+      root_key: "mindgraphsim_s3_model_comparison"
+      required_fields:
+        engine_version: "string (matches engine tag, e.g. 'v0.9-S3')"
+        scene_id: "string"
+        profile_id: "string"
+        input_script: "string (scenario file name)"
+        models_tested: "array of strings"
+        winner_model_id: "string"
+        results:
+          per_model:
+            density: "float"
+            patterns: "integer"
+            overloads: "integer"
+            status: "PASS | FAIL"
+    example:
+      mindgraphsim_s3_model_comparison:
+        engine_version: "v0.9-S3"
+        scene_id: "conflict_resolution"
+        profile_id: "open_neutral"
+        input_script: "stress_test.yaml"
+        models_tested: ["baseline", "pattern_coupled", "high_damping"]
+        winner_model_id: "baseline"
+
+  guardrails:
+    - "Never run S3 harness if latest S2 QA report is FAIL."
+    - "Do not change MODEL_REGISTRY semantics without updating this spec."
+    - "Do not weaken constraints (max_density, max_patterns, max_overloads) unless a new YAML spec explicitly does so."
+    - "If all models FAIL, do not pick a winner; emit winner_model_id: null and mark run as ATTENTION_REQUIRED."
+
+  future_hooks:
+    - "Add support for additional scenes (e.g. 'brainstorm_net') using same comparison pipeline."
+    - "Add recording of time series snapshots for visual replay in UI."
+    - "Expose a simple 'Run S3 Comparison' button in the browser UI that calls this harness under the hood."

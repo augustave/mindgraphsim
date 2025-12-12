@@ -1,0 +1,141 @@
+const fs = require('fs');
+const path = require('path');
+
+// --- Mock DOM & Canvas (Reused) ---
+const mockElement = {
+    getContext: () => ({
+        setTransform: () => { }, beginPath: () => { }, moveTo: () => { }, lineTo: () => { }, stroke: () => { }, arc: () => { }, fill: () => { },
+        save: () => { }, restore: () => { }, translate: () => { }, scale: () => { }, rotate: () => { }, fillText: () => { }, measureText: () => ({ width: 0 }),
+        fillRect: () => { }, clearRect: () => { }, setLineDash: () => { }, getLineDash: () => [],
+        createLinearGradient: () => ({ addColorStop: () => { } }), createRadialGradient: () => ({ addColorStop: () => { } }),
+        createPattern: () => { }, drawImage: () => { }, globalAlpha: 1, strokeStyle: '', fillStyle: '', lineWidth: 1,
+        bezierCurveTo: () => { }, quadraticCurveTo: () => { }, closePath: () => { }, rect: () => { }, clip: () => { }
+    }),
+    parentElement: { getBoundingClientRect: () => ({ width: 800, height: 600 }), parentElement: { appendChild: () => { }, classList: { add: () => { }, remove: () => { } } } },
+    classList: { toggle: () => { }, add: () => { }, remove: () => { } },
+    textContent: '', className: '', innerHTML: '', value: '', style: {},
+    addEventListener: () => { }, removeEventListener: () => { },
+    querySelectorAll: () => [], querySelector: () => ({}),
+    appendChild: () => { }, removeChild: () => { },
+    getBoundingClientRect: () => ({ width: 800, height: 600 })
+};
+
+global.window = { addEventListener: () => { }, devicePixelRatio: 1, getComputedStyle: () => ({}) };
+global.document = {
+    getElementById: () => mockElement,
+    addEventListener: () => { },
+    body: mockElement,
+    createElement: () => mockElement,
+};
+global.performance = { now: () => Date.now() };
+global.requestAnimationFrame = (cb) => { };
+
+// --- Load Engine ---
+const enginePath = path.join(__dirname, '../mgs-engine.js');
+let engineCode = fs.readFileSync(enginePath, 'utf8');
+
+// Expose internal globals for testing
+engineCode = engineCode.replace(/let state =/g, 'global.state =');
+engineCode = engineCode.replace(/let patternIdCounter =/g, 'global.patternIdCounter =');
+engineCode = engineCode.replace(/let hudMetrics =/g, 'global.hudMetrics =');
+engineCode = engineCode.replace(/let currentContext =/g, 'global.currentContext =');
+engineCode = engineCode.replace(/let physicsConfig =/g, 'global.physicsConfig =');
+
+try { eval(engineCode); } catch (e) { console.error("Error loading engine:", e); process.exit(1); }
+
+// --- CLI Args ---
+const args = process.argv.slice(2);
+const getArg = (key, defaultVal) => {
+    const idx = args.indexOf(key);
+    return idx !== -1 && args[idx + 1] ? args[idx + 1] : defaultVal;
+};
+const hasArg = (key) => args.includes(key);
+
+const SCENE_ID = getArg('--scene', 'conflict_resolution');
+const STEPS = parseInt(getArg('--steps', '500'), 10);
+const WRITE_FILE = hasArg('--write');
+
+// --- Git Hash ---
+let gitHash = 'unknown';
+try {
+    gitHash = require('child_process').execSync('git rev-parse --short HEAD').toString().trim();
+} catch (e) { /* ignore */ }
+
+// --- Harness Logic ---
+function runSteps(count) {
+    const dt = 0.016;
+    for (let i = 0; i < count; i++) {
+        integratePhysics(dt);
+        applySemanticPositionalBias();
+        applyPatternInfluence();
+        updateEnergyStress(dt);
+        ambientStep(dt);
+        activationStep(dt);
+        if (i % 5 === 0) detectPatterns();
+        state.step++;
+    }
+    updateHUDMetrics();
+}
+
+const combos = [
+    { p: 'open_neutral', f: 'frame_open_exploration', id: 'open_neutral' },
+    { p: 'adhd_scatter_focus', f: 'frame_brainstorm_session', id: 'adhd_scatter_focus' },
+    { p: 'autistic_sensory_sheet', f: 'frame_conflict_mediation', id: 'autistic_sensory_sheet' },
+    { p: 'meditative_slow_field', f: 'frame_meditative_field', id: 'meditative_slow_field' }
+];
+
+let results = {};
+
+console.warn(`Running QA Harness: Scene=${SCENE_ID}, Steps=${STEPS}, Commit=${gitHash}`);
+
+combos.forEach(c => {
+    loadScene(SCENE_ID);
+    applyProfile(c.p);
+    applyFrame(c.f);
+    runSteps(STEPS);
+
+    const pats = state.patterns.length;
+    const over = state.overloads;
+    const dens = state.metrics.patternDensity;
+    const status = (over > 0 || dens > 5.0 || pats > 30) ? 'FAIL' : 'PASS';
+
+    results[c.id] = {
+        density: parseFloat(dens.toFixed(2)),
+        patterns: pats,
+        overloads: over,
+        status: status
+    };
+});
+
+// --- Output YAML ---
+const yamlOutput = `mindgraphsim_s2_qa_run:
+  engine_version: "v0.8-S2.5"
+  commit_hash: "${gitHash}"
+  profiles_tested: [${combos.map(c => `"${c.id}"`).join(', ')}]
+  steps_per_profile: ${STEPS}
+  constraints:
+    max_density: 5.0
+    max_patterns: 30
+    max_overloads: 0
+  results:
+${Object.keys(results).map(key => {
+    const r = results[key];
+    return `    ${key}:
+      density: ${r.density}
+      patterns: ${r.patterns}
+      overloads: ${r.overloads}
+      status: ${r.status}`;
+}).join('\n')}
+  notes:
+    - "Generated by tests/generate_qa_report.cjs"
+    - "Density thresholds: < 1.5 CALM, < 3.0 BUSY, >= 3.0 SATURATED"
+`;
+
+if (WRITE_FILE) {
+    const outPath = path.join(__dirname, '../docs/mindgraphsim_s2_qa_run.yaml');
+    fs.writeFileSync(outPath, yamlOutput);
+    console.warn(`Report written to ${outPath}`);
+} else {
+    console.log(yamlOutput);
+}
+

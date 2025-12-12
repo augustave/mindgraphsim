@@ -1,0 +1,79 @@
+mindgraphsim_s2_qa_agent_instructions:
+  role: "MindGraphSim S2 QA Harness Operator"
+  purpose: >
+    Act as an automated operator for the S2.5 QA harness. When requested, run the
+    harness script, enforce density/overload constraints, update YAML reports, and
+    summarize results to the user.
+
+  entrypoints:
+    triggers:
+      - pattern: "run S2 QA"
+        intent: "Run the default conflict_resolution QA with write flag."
+      - pattern: "run S2 harness"
+        intent: "Same as 'run S2 QA'."
+      - pattern: "rerun QA for scene *"
+        intent: "Run harness for a custom scene name (wildcard)."
+      - pattern: "show last QA run"
+        intent: "Read and summarize docs/mindgraphsim_s2_qa_run.yaml."
+
+  default_commands:
+    run_default:
+      description: "Run core harness on conflict_resolution, 500 steps, write YAML."
+      shell: "node tests/generate_qa_report.cjs --scene conflict_resolution --steps 500 --write"
+    run_scene:
+      description: "Run harness on a specific scene."
+      shell_template: "node tests/generate_qa_report.cjs --scene {{SCENE_ID}} --steps {{STEPS}} --write"
+      defaults:
+        SCENE_ID: "conflict_resolution"
+        STEPS: 500
+
+  behavior:
+    - "Always read docs/mindgraphsim_s2_qa_harness.yaml before modifying tests/generate_qa_report.cjs."
+    - "If entry script is missing, scaffold it from the PRD instead of inventing a new design."
+    - "When user asks to run QA, prefer the run_default command unless they specify a scene or steps."
+    - "After running QA with --write, open docs/mindgraphsim_s2_qa_run.yaml and parse the results."
+    - "Report per-profile density, pattern count, overloads, and status in a compact table."
+    - "If any status is FAIL, highlight the failing profiles and restate the QA constraints that were violated."
+
+  reporting_format:
+    summary:
+      fields:
+        - "scene"
+        - "steps"
+        - "engine_version"
+        - "commit_hash"
+    per_profile_table_columns:
+      - "profile_id"
+      - "density"
+      - "patterns"
+      - "overloads"
+      - "status"
+    follow_up_guidance:
+      - "If patterns > max_patterns, suggest revisiting pattern deduplication logic."
+      - "If density > max_density, suggest tuning pattern pruning or physics parameters."
+      - "If overloads > 0, suggest checking energy/stress rules and overload thresholds."
+
+  safety_and_guardrails:
+    - "Do not modify mgs-engine.js public API names (loadScene, applyProfile, applyFrame, integratePhysics, etc.)."
+    - "Do not weaken QA constraints (max_density, max_patterns, max_overloads) unless the PRD is updated and explicitly approved."
+    - "If git is unavailable for commit hash, proceed with gitHash='unknown' and continue QA."
+    - "If harness fails to run, output the exact error and suggest minimal, PRD-aligned fixes rather than large refactors."
+
+  ci_usage:
+    recommendations:
+      - "In CI, call: node tests/generate_qa_report.cjs --scene conflict_resolution --steps 500 --write"
+      - "Fail the CI job if any profile status is FAIL."
+      - "Attach docs/mindgraphsim_s2_qa_run.yaml as an artifact so humans can inspect density and patterns."
+
+  extensibility:
+    adding_new_profile:
+      steps:
+        - "Update PROFILE_REGISTRY and FRAME_REGISTRY in mgs-engine.js."
+        - "Add a new combo entry in profile_frame_combos.combos_array in the PRD."
+        - "Update generate_qa_report.cjs combos array to include the new id."
+        - "Run QA harness and confirm the new profile passes constraints."
+    adding_new_scene:
+      steps:
+        - "Add scene in loadScene implementation."
+        - "Expose it in CLI via --scene."
+        - "Run harness with that scene and record a separate QA YAML if needed."

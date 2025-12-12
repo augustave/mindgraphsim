@@ -1,0 +1,160 @@
+mindgraphsim_s2_5_status:
+  phase: "S2.5 – Frame & Profile System + Cleanup"
+  engine_version: "v0.8-S2.5"
+  owner: "MindGraphSim Core Engine"
+
+  summary:
+    - Legacy monolithic PROFILES have been split into:
+      - PROFILE_REGISTRY: physics presets
+      - FRAME_REGISTRY: interpretive/visual lenses
+    - Base physics is centralized in BASE_PHYSICS_CONFIG (“Thought Laboratory” baseline).
+    - Profiles rescale physics; frames modulate pattern weighting and visuals only.
+    - Cluster, loop, and wave pattern duplication is under control via fuzzy overlap.
+    - Density lens and multi-profile harness are live and passing.
+
+  registries:
+    profiles:
+      - id: "open_neutral"
+        role: "Default physics baseline (calm, general-purpose)."
+        notes: "Boot profile at startup."
+      - id: "adhd_scatter_focus"
+        role: "Higher noise / lower friction profile for rapid, scattered activations."
+        notes: "Uses multipliers on base physics to increase jitter and pattern turnover."
+      - id: "autistic_sensory_sheet"
+        role: "High sensory coupling / lower noise; more coherent field, stronger membranes."
+        notes: "Used for demos of sheet-like stability and boundary effects."
+      - id: "meditative_slow_field"
+        role: "Low noise, high damping; slow, deep dynamics."
+        notes: "Good for long-run drift tests and calm field visuals."
+
+    frames:
+      - id: "frame_open_exploration"
+        role: "Neutral interpretive lens; no bias for conflict/overload."
+        notes: "Default frame; keeps pattern weights close to 1.0."
+      - id: "frame_conflict_mediation"
+        role: "Highlights bridges, waves, and common-ground nodes."
+        notes: "Boosts bridge/loop visibility, useful for negotiation / alignment scenes."
+      - id: "frame_brainstorm_session"
+        role: "Emphasizes cluster growth and wave propagation."
+        notes: "Good for ‘idea storm’ demos, with strong wave weights."
+      - id: "frame_sensory_overload_scan"
+        role: "Surfaces overload risk and dense pattern regions."
+        notes: "Uses densityStatus and overloadRisk in the HUD."
+      - id: "frame_meditative_field"
+        role: "Soft visual emphasis, slower HUD dynamics."
+        notes: "Pairs well with meditative_slow_field profile."
+
+  base_physics_and_isolation:
+    base_physics_config:
+      description: "Source of truth for ‘Thought Laboratory’ baseline physics."
+      usage: "applyProfile(id) multiplies BASE_PHYSICS_CONFIG by profile.physics gains."
+    profile_behavior:
+      applyProfile:
+        guarantee:
+          - "Only touches physicsConfig and other strictly physical parameters."
+          - "Does NOT alter pattern weights or visual settings."
+    frame_behavior:
+      applyFrame:
+        guarantee:
+          - "Does NOT alter physicsConfig."
+          - "Only affects pattern weighting, visual emphasis, and HUD behavior."
+        integration_points:
+          - "pruneAndRankPatterns uses currentFrame.behavior.pattern_weights."
+          - "HUD reads currentFrame for display hints."
+
+  public_api:
+    listProfiles:
+      signature: "listProfiles(): ProfileSummary[]"
+      contract:
+        - "Returns all registered profiles with id and label."
+    applyProfile:
+      signature: "applyProfile(id: string): void"
+      contract:
+        - "No-op if id is unknown (logs warning)."
+        - "Recomputes physicsConfig from BASE_PHYSICS_CONFIG * profile.physics."
+    listFrames:
+      signature: "listFrames(): FrameSummary[]"
+      contract:
+        - "Returns all registered frames with id and label."
+    applyFrame:
+      signature: "applyFrame(id: string): void"
+      contract:
+        - "No-op if id is unknown (logs warning)."
+        - "Updates currentFrame and any cached behavior weights."
+    getCurrentContext:
+      signature: "getCurrentContext(): CurrentContext"
+      fields:
+        profile_id: "Current profile id."
+        frame_id: "Current frame id."
+        metrics: "Cached metrics (patternDensity, densityStatus, overloadRisk, etc.)."
+
+  pattern_control_and_density:
+    deduplication:
+      cluster_dedup:
+        method: "Fuzzy overlap (Jaccard) with threshold 0.6."
+        effect: "Reduces duplicate clusters under noisy profiles (e.g., ADHD)."
+      loop_dedup:
+        method: "Jaccard overlap; merges loops if overlap >= 0.7."
+      wave_dedup:
+        method: "Same helper calculatePatternOverlap; uses PATTERN_CONFIG.waveCoalesceOverlap ≈ 0.7."
+    density_metric:
+      source: "updateHUDMetrics"
+      formula: "patternDensity = patterns.length / max(objects.length, 1)"
+      status_mapping:
+        - "CALM: density < ~1.0"
+        - "BUSY: moderate band (e.g., 1.0–3.0)"
+        - "SATURATED: density ≥ threshold (guard ~5.0, HUD shows SATURATED when approaching)."
+
+  s2_cleanup_status:
+    density_lens_hud (S2_T6):
+      implementation:
+        - "Density Lens row auto-injected if missing (element id: hud-density-value)."
+        - "Displays numeric patternDensity and densityStatus badge (CALM/BUSY/SATURATED)."
+      data_source: "state.metrics.patternDensity and state.metrics.densityStatus."
+      acceptance_criteria:
+        - "HUD always shows a valid density value when simulation is running."
+        - "Status badge changes when density crosses thresholds."
+    multi_profile_harness (S2_T7):
+      script: "tests/harness.cjs"
+      profiles_tested:
+        - "open_neutral + frame_open_exploration (Default Open)"
+        - "adhd_scatter_focus + frame_brainstorm_session (ADHD + Brainstorm)"
+        - "autistic_sensory_sheet + frame_conflict_mediation (Autistic + Conflict)"
+        - "meditative_slow_field + frame_meditative_field (Meditative + Meditative)"
+      constraints:
+        - "No overloads."
+        - "patternDensity < 5.0 (explosion guard)."
+        - "patternCount < 30."
+      results:
+        default_open:
+          status: "PASS"
+          patterns: 17
+          density: 2.13
+          density_status: "BUSY"
+        adhd_brainstorm:
+          status: "PASS"
+          patterns: 22
+          density: 2.75
+          density_status: "BUSY"
+        autistic_conflict:
+          status: "PASS"
+          patterns: 18
+          density: 2.25
+          density_status: "BUSY"
+        meditative_meditative:
+          status: "PASS"
+          patterns: 16
+          density: 2.00
+          density_status: "BUSY"
+
+  guardrails_for_future_changes:
+    - "Do not re-couple frames and profiles; keep physics and interpretation separated."
+    - "Do not bypass deduplication logic for clusters/loops/waves without adding new tests."
+    - "Any new profile must integrate into PROFILE_REGISTRY and pass harness density/overload constraints."
+    - "Any new frame must only change pattern weights / HUD visuals, never raw physics."
+    - "runBridgeRegressionTest and harness.cjs must remain green before starting S3 ‘external inputs’ work."
+
+  next_phase_hint:
+    s3_external_inputs:
+      precondition: "All S2 tasks (T1–T7) remain green, with harness and regression tests passing."
+      note: "External input / multi-model work must respect the profile–frame separation and density guardrails."
