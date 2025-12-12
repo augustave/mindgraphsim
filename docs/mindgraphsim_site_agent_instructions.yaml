@@ -1,0 +1,83 @@
+mindgraphsim_site_agent:
+  phase: "Site v0.7 – Vercel Build & Stability"
+  owner: "augustave"
+  repo: "mindgraphsim"
+
+  goal:
+    summary: >
+      Keep the MindGraphSim site building and deploying on Vercel without
+      breaking the simulation or UX. Fix build / type errors only; do not
+      redesign the app or change physics behavior.
+
+  scope:
+    allowed_changes:
+      - "Vercel / Vite build configuration (vercel.json, vite*.config.*)."
+      - "TypeScript config and types ONLY as needed to make the build pass."
+      - "Non-behavioral cleanup (unused imports, dead code, obvious typos)."
+      - "Docs about build + QA: README, docs/*.md, docs/*.yaml."
+    forbidden_changes:
+      - "Do NOT modify core simulation behavior (physics, pattern logic)."
+      - "Do NOT change domain logic in src/simulation.ts, src/patterns.ts, src/materials.ts except to fix type errors that block build."
+      - "Do NOT change UI behavior in ways that alter controls/telemetry without an explicit new spec from the user."
+      - "Do NOT introduce new libraries, frameworks, or build tools."
+
+  build_contract:
+    commands:
+      check: "npm run check"       # tsc --noEmit
+      dev:   "npm run dev"
+      build: "npm run build"       # currently runs: vite build --config vite.site.config.ts
+    requirements:
+      - "All commands above must succeed locally in CI or Codespace."
+      - "Build artifacts must end up in 'dist/' for Vercel."
+    vercel:
+      config_file: "vercel.json"
+      expected_fields:
+        framework: "vite"
+        buildCommand: "npm run build"
+        outputDirectory: "dist"
+
+  ts_config_policy:
+    tsconfig_file: "tsconfig.json"
+    rules:
+      - "tsconfig.json must be valid JSON."
+      - "Prefer RELAXED, not hyper-strict, flags for this project."
+      - "If you relax a flag, document why in a code comment or README section."
+    export_style:
+      - "Separate type exports from value exports using 'export type' where needed."
+      - "If build fails because of type/value export mixing, fix the exports first, before touching business logic."
+
+  workflow:
+    steps:
+      - "Pull latest main and confirm clean working tree."
+      - "Run: npm install (if needed)."
+      - "Run: npm run check. Fix ONLY type + import issues until it passes."
+      - "Run: npm run build. If it fails, prefer config fixes (Vite/Vercel/tsconfig) over logic changes."
+      - "After build passes, open dev server and smoke test the app:"
+        # keep it functional, not pretty
+        - "Controls: Step / Run 10 / Run 100 / Reset / Inject Noise still work."
+        - "ASCII View updates when stepping or running."
+        - "Telemetry (Step, Objects, Patterns, Overloads, etc.) shows sane values."
+      - "Commit with a clear message (e.g., 'chore: fix build config for Vercel')."
+      - "Describe exactly what changed and why in the PR description."
+
+  qa_checks:
+    manual_smoke:
+      - "Run: npm run dev and interact with the app for at least 10–20 steps."
+      - "Verify no console errors in the browser."
+      - "Verify the site is not slower or more confusing than before."
+    automated:
+      - "npm run check must pass."
+      - "npm run build must pass."
+
+  guardrails:
+    - "If a change would alter simulation semantics (physics, patterns, stability), STOP and ask for a new spec from the user."
+    - "Do not add or remove profiles, scenes, or pattern types."
+    - "Do not change deployment target (Vercel + static dist/)."
+    - "If unsure whether a change is 'build-only' or 'behavioral', assume it IS behavioral and leave a TODO comment instead of editing."
+
+  definition_of_done:
+    - "Vercel build succeeds without errors."
+    - "npm run check and npm run build both exit with code 0."
+    - "The UI remains usable: controls respond, ASCII view moves, telemetry updates."
+    - "No new dependencies or frameworks introduced."
+    - "PR description links back to this YAML and explains what was done."
