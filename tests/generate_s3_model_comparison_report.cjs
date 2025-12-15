@@ -31,18 +31,13 @@ global.performance = { now: () => Date.now() };
 global.requestAnimationFrame = (cb) => { };
 
 // --- Load Engine ---
-const enginePath = path.join(__dirname, '../mgs-engine.js');
-let engineCode = fs.readFileSync(enginePath, 'utf8');
+const enginePath = path.join(__dirname, '../dist/mgs-engine.js');
+const engineCode = fs.readFileSync(enginePath, 'utf8');
 
-// Replacements to expose internals
-engineCode = engineCode.replace(/let state =/g, 'global.state =');
-engineCode = engineCode.replace(/let patternIdCounter =/g, 'global.patternIdCounter =');
-engineCode = engineCode.replace(/let hudMetrics =/g, 'global.hudMetrics =');
-engineCode = engineCode.replace(/let currentContext =/g, 'global.currentContext =');
-engineCode = engineCode.replace(/let physicsConfig =/g, 'global.physicsConfig =');
-// Note: windows globals like InputAdapter, applyModel, MODEL_REGISTRY are exposed at end of file
-
-try { eval(engineCode); } catch (e) { console.error("Error loading engine:", e); process.exit(1); }
+try {
+    eval(engineCode);
+    Object.assign(global, global.document.defaultView || global.window);
+} catch (e) { console.error("Error loading engine:", e); process.exit(1); }
 
 // Access exposed globals
 const engineInputAdapter = window.InputAdapter;

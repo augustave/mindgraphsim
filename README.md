@@ -116,11 +116,11 @@ When sensory load exceeds threshold:
 
 ## Quick Start
 
-Open `standalone-demo.html` directly in a browser - no build step required.
-
-## Quick Start (Demo)
+The live site shows the v1 Lab UI.
 
 Open `dist/index.html` in any modern browser. No build steps required.
+
+For development, use `npm run dev` to start the Vite server.
 
 ## Development & Analysis
 
@@ -163,6 +163,15 @@ See [docs/lab_report_v1.yaml](docs/lab_report_v1.yaml) for the latest certified 
 - **Narratives**: Click 📝 to get a text summary of the session dynamics.
 - **Catalog**: Use the "Catalog" button to switch physics profiles (e.g., Autism, ADHD) and lens frames.
 
+> [!IMPORTANT]
+> [!IMPORTANT]
+> **Codebase Status (S7 Migration Complete)**
+>
+> - **Runtime Engine**: `dist/mgs-engine.js` is the **Production Source of Truth**. All QA and regression tests target this file.
+> - **Development Source**: `src/` is the **Only** place for edits. Run `npm run build` to update the engine.
+> - **Legacy File**: `mgs-engine.js` (root) is **DEPRECATED**. Do not edit it. It is kept only for historical comparison until S8.
+> - **Tests**: All tests correctly verify `dist/mgs-engine.js`.
+
 ## File Structure
 
 ```
@@ -174,7 +183,7 @@ See [docs/lab_report_v1.yaml](docs/lab_report_v1.yaml) for the latest certified 
 ├── scripts/              # Build/Report tools
 ├── tests/                # QA Harnesses (Node.js)
 ├── mgs-engine.js         # Core Physics Engine (~4k lines)
-└── standalone-demo.html  # Dev Entry Point
+└── src/lab_view.ts       # S2 Lab UI entry (uses index.html)
 ```
 
 ## Origin

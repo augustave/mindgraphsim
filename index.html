@@ -1,193 +1,937 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>MindGraphSim v0.7</title>
-    <style>
-      * {
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
-      }
 
-      body {
-        font-family: 'Space Mono', 'Courier New', monospace;
-        background: #1a1a1a;
-        color: #b0b0b0;
-        min-height: 100vh;
-        padding: 2rem;
-      }
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MindGraphSim v1.0 Lab</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
 
-      h1 {
-        color: #ff3333;
-        margin-bottom: 1rem;
-        font-size: 2rem;
-      }
+    html,
+    body {
+      height: 100%;
+      background: #050608;
+      font-family: 'Space Mono', system-ui, monospace;
+      color: #c4c4c4;
+    }
 
-      h2 {
-        color: #dfff00;
-        margin: 1.5rem 0 0.5rem;
-        font-size: 1.2rem;
-      }
+    .mgs-app {
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
 
-      .container {
-        max-width: 1200px;
-        margin: 0 auto;
-      }
+    .mgs-header {
+      padding: 8px 16px 4px;
+      border-bottom: 1px solid #2a2a2a;
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+    }
 
-      .controls {
-        display: flex;
-        gap: 1rem;
-        margin-bottom: 1rem;
-        flex-wrap: wrap;
-      }
+    .mgs-header h1 {
+      color: #ff4d4d;
+      font-size: 1.1rem;
+      font-weight: 600;
+    }
 
-      button {
-        background: #0033a0;
-        color: #fff;
-        border: none;
-        padding: 0.5rem 1rem;
-        font-family: inherit;
-        cursor: pointer;
-        transition: background 0.2s;
-      }
+    .mgs-header .version {
+      color: #e6ff1a;
+      font-size: 0.7rem;
+      font-weight: 600;
+    }
 
-      button:hover {
-        background: #0044cc;
-      }
+    .mgs-header p {
+      font-size: 0.7rem;
+      color: #949494;
+    }
 
-      button.active {
-        background: #ff3333;
-      }
+    .mgs-toolbar {
+      padding: 6px 16px;
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      align-items: center;
+      border-bottom: 1px solid #2a2a2a;
+      background: #0a0a0c;
+    }
 
-      select {
-        background: #333;
-        color: #fff;
-        border: 1px solid #666;
-        padding: 0.5rem;
-        font-family: inherit;
-      }
+    .mgs-toolbar-group {
+      display: flex;
+      gap: 4px;
+      align-items: center;
+      padding-right: 10px;
+      border-right: 1px solid #2a2a2a;
+      margin-right: 4px;
+    }
 
-      .stats {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-        gap: 1rem;
-        margin-bottom: 1rem;
-      }
+    .mgs-toolbar-group:last-child {
+      border-right: none;
+    }
 
-      .stat {
-        background: #222;
-        padding: 1rem;
-        border-left: 3px solid #ff3333;
-      }
+    .mgs-toolbar-group label {
+      font-size: 0.6rem;
+      color: #666;
+      text-transform: uppercase;
+      margin-right: 4px;
+    }
 
-      .stat-label {
-        font-size: 0.75rem;
-        color: #666;
-        text-transform: uppercase;
-      }
+    .mgs-toolbar button {
+      background: #1a5cff;
+      color: #fff;
+      border: none;
+      padding: 5px 10px;
+      font-family: inherit;
+      font-size: 0.75rem;
+      cursor: pointer;
+      border-radius: 3px;
+    }
 
-      .stat-value {
-        font-size: 1.5rem;
-        color: #dfff00;
-      }
+    .mgs-toolbar button:hover {
+      background: #3d75ff;
+    }
 
-      #ascii-view {
-        background: #0d0d0d;
-        padding: 1rem;
-        font-size: 10px;
-        line-height: 1.2;
-        white-space: pre;
-        overflow-x: auto;
-        border: 1px solid #333;
-      }
+    .mgs-toolbar button:focus {
+      outline: 2px solid #e6ff1a;
+      outline-offset: 2px;
+    }
 
-      #log {
-        background: #0d0d0d;
-        padding: 1rem;
-        max-height: 200px;
-        overflow-y: auto;
-        font-size: 0.75rem;
-        border: 1px solid #333;
-      }
+    .mgs-toolbar button.secondary {
+      background: #333;
+    }
 
-      .log-entry {
-        margin-bottom: 0.25rem;
-      }
+    .mgs-toolbar button.secondary:hover {
+      background: #444;
+    }
 
-      .log-step {
-        color: #666;
-      }
+    .mgs-toolbar select {
+      background: #1a1a1a;
+      color: #fff;
+      border: 1px solid #4a4a4a;
+      padding: 5px 8px;
+      font-family: inherit;
+      font-size: 0.75rem;
+      border-radius: 3px;
+    }
 
-      .log-overload {
-        color: #ff3333;
-      }
+    .mgs-toolbar select:focus {
+      outline: 2px solid #e6ff1a;
+      outline-offset: 2px;
+    }
 
-      .log-recovery {
-        color: #00ff88;
-      }
+    .mgs-timeline {
+      padding: 6px 16px;
+      background: #08080a;
+      border-bottom: 1px solid #2a2a2a;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
 
-      .log-pattern {
-        color: #dfff00;
-      }
-    </style>
-  </head>
-  <body>
-    <div class="container">
-      <h1>MindGraphSim v0.7</h1>
-      <p>Physics-based cognitive simulation for neurodivergent thought</p>
+    .mgs-timeline-controls {
+      display: flex;
+      gap: 4px;
+    }
 
-      <h2>Controls</h2>
-      <div class="controls">
-        <button id="btn-step">Step</button>
-        <button id="btn-run">Run 10</button>
-        <button id="btn-run-100">Run 100</button>
-        <button id="btn-reset">Reset</button>
-        <button id="btn-noise">Inject Noise</button>
+    .mgs-timeline-controls button {
+      background: #222;
+      color: #c4c4c4;
+      border: 1px solid #333;
+      width: 28px;
+      height: 28px;
+      font-size: 0.8rem;
+      cursor: pointer;
+      border-radius: 3px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .mgs-timeline-controls button:hover {
+      background: #333;
+    }
+
+    .mgs-timeline-controls button:focus {
+      outline: 2px solid #e6ff1a;
+      outline-offset: 1px;
+    }
+
+    .mgs-timeline-controls button.active {
+      background: #1a5cff;
+      color: #fff;
+      border-color: #1a5cff;
+    }
+
+    .mgs-scrubber {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .mgs-scrubber input[type="range"] {
+      flex: 1;
+      height: 6px;
+      -webkit-appearance: none;
+      appearance: none;
+      background: #222;
+      border-radius: 3px;
+      cursor: pointer;
+    }
+
+    .mgs-scrubber input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px;
+      height: 14px;
+      background: #1a5cff;
+      border-radius: 50%;
+      cursor: pointer;
+    }
+
+    .mgs-scrubber-label {
+      font-size: 0.7rem;
+      color: #949494;
+      min-width: 100px;
+    }
+
+    .mgs-mode-badge {
+      font-size: 0.6rem;
+      padding: 2px 6px;
+      border-radius: 3px;
+      text-transform: uppercase;
+      font-weight: 600;
+    }
+
+    .mgs-mode-badge.live {
+      background: #1a5cff;
+      color: #fff;
+    }
+
+    /* Catalog Modal */
+    .mgs-modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.8);
+      z-index: 2000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .mgs-modal-overlay.open {
+      display: flex;
+    }
+
+    .mgs-catalog-modal {
+      width: 800px;
+      max-width: 90%;
+      max-height: 80vh;
+      background: #1a1a1a;
+      border: 1px solid #444;
+      border-radius: 8px;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    }
+
+    .mgs-catalog-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid #333;
+    }
+
+    .mgs-catalog-header h2 {
+      margin: 0;
+      font-family: 'Space Mono', monospace;
+      color: #fff;
+    }
+
+    .mgs-close-btn {
+      background: none;
+      border: none;
+      color: #888;
+      font-size: 1.5rem;
+      cursor: pointer;
+    }
+
+    .mgs-close-btn:hover {
+      color: #fff;
+    }
+
+    .mgs-catalog-content {
+      display: flex;
+      gap: 20px;
+      overflow-y: auto;
+      flex: 1;
+    }
+
+    .mgs-catalog-section {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .mgs-catalog-section h3 {
+      font-size: 0.9rem;
+      text-transform: uppercase;
+      color: #666;
+      margin: 0 0 10px 0;
+      letter-spacing: 1px;
+    }
+
+    .mgs-catalog-card {
+      background: #252525;
+      border: 1px solid #333;
+      padding: 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .mgs-catalog-card:hover {
+      border-color: #666;
+      background: #2a2a2a;
+      transform: translateY(-2px);
+    }
+
+    .mgs-catalog-card h4 {
+      margin: 0 0 4px 0;
+      color: #eee;
+      font-size: 1rem;
+    }
+
+    .mgs-catalog-card p {
+      margin: 0;
+      color: #888;
+      font-size: 0.8rem;
+      line-height: 1.4;
+    }
+
+    .mgs-catalog-card .tag {
+      display: inline-block;
+      font-size: 0.65rem;
+      background: #333;
+      color: #aaa;
+      padding: 2px 6px;
+      border-radius: 3px;
+      margin-top: 8px;
+    }
+
+    .mgs-mode-badge.replay {
+      background: #ffaa00;
+      color: #111;
+    }
+
+    .mgs-mode-badge.calm {
+      background: #1a5cff;
+      color: #fff;
+    }
+
+    .mgs-mode-badge.busy {
+      background: #e6ff1a;
+      color: #000;
+    }
+
+    .mgs-mode-badge.saturated {
+      background: #ff4d4d;
+      color: #fff;
+    }
+
+    .mgs-hud {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background: rgba(10, 10, 12, 0.9);
+      border: 1px solid #2a2a2a;
+      border-radius: 6px;
+      padding: 8px 12px;
+      font-size: 0.7rem;
+      z-index: 10;
+    }
+
+    .mgs-hud-title {
+      color: #949494;
+      font-size: 0.6rem;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+
+    .mgs-hud-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+
+    .mgs-hud-label {
+      color: #666;
+      min-width: 70px;
+    }
+
+    .mgs-hud-value {
+      color: #c4c4c4;
+      font-weight: 600;
+    }
+
+    .mgs-hud-bar {
+      width: 60px;
+      height: 6px;
+      background: #222;
+      border-radius: 3px;
+      overflow: hidden;
+    }
+
+    .mgs-hud-bar-fill {
+      height: 100%;
+      transition: width 0.3s, background 0.3s;
+    }
+
+    .mgs-hud-bar-fill.low {
+      background: #5cff9d;
+    }
+
+    .mgs-hud-bar-fill.medium {
+      background: #e6ff1a;
+    }
+
+    .mgs-hud-bar-fill.high {
+      background: #ff6b6b;
+    }
+
+    .mgs-trend {
+      font-size: 0.8rem;
+    }
+
+    .mgs-trend.up {
+      color: #ff6b6b;
+    }
+
+    .mgs-trend.stable {
+      color: #949494;
+    }
+
+    .mgs-trend.down {
+      color: #5cff9d;
+    }
+
+    .mgs-main {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      gap: 10px;
+      padding: 10px 12px 12px;
+    }
+
+    .mgs-graph-shell {
+      flex: 3;
+      position: relative;
+      border-radius: 6px;
+      border: 1px solid #2a2a2a;
+      background: radial-gradient(ellipse at center, #101018 0%, #050608 100%);
+      overflow: hidden;
+      min-height: 0;
+    }
+
+    .mgs-graph-shell canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .mgs-lens-indicator {
+      position: absolute;
+      bottom: 10px;
+      left: 10px;
+      background: rgba(10, 10, 12, 0.85);
+      border: 1px solid #2a2a2a;
+      border-radius: 4px;
+      padding: 4px 8px;
+      font-size: 0.65rem;
+      color: #949494;
+    }
+
+    .mgs-lens-indicator strong {
+      color: #e6ff1a;
+    }
+
+    .mgs-side {
+      flex: 1.3;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      min-width: 260px;
+      max-width: 400px;
+    }
+
+    .mgs-card {
+      background: #0d0d10;
+      border-radius: 5px;
+      border: 1px solid #2a2a2a;
+      padding: 8px 10px;
+      font-size: 0.7rem;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .mgs-card h3 {
+      color: #e6ff1a;
+      font-size: 0.65rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .mgs-card h3 .count {
+      background: #222;
+      color: #949494;
+      padding: 1px 5px;
+      border-radius: 3px;
+      font-size: 0.6rem;
+    }
+
+    .mgs-patterns {
+      flex: 1;
+      min-height: 100px;
+    }
+
+    .mgs-pattern-list {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      overflow-y: auto;
+      max-height: 150px;
+    }
+
+    .mgs-pattern-item {
+      background: #151518;
+      padding: 6px 8px;
+      border-radius: 4px;
+      border-left: 3px solid #4a4a4a;
+      cursor: pointer;
+    }
+
+    .mgs-pattern-item:hover {
+      background: #1a1a1e;
+    }
+
+    .mgs-pattern-item.selected {
+      background: #1a1a2a;
+      border-color: #1a5cff;
+    }
+
+    .mgs-pattern-item.loop {
+      border-color: #ff85c1;
+    }
+
+    .mgs-pattern-item.cluster {
+      border-color: #4dd9e0;
+    }
+
+    .mgs-pattern-item.wave {
+      border-color: #e6ff1a;
+    }
+
+    .mgs-pattern-item.levin {
+      border-color: #ff85c1;
+      background: #1a1520;
+    }
+
+    .mgs-pattern-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .mgs-pattern-name {
+      color: #fff;
+      font-weight: 500;
+    }
+
+    .mgs-pattern-type {
+      font-size: 0.55rem;
+      text-transform: uppercase;
+      padding: 1px 4px;
+      border-radius: 2px;
+      background: #222;
+      color: #949494;
+    }
+
+    .mgs-pattern-stats {
+      display: flex;
+      gap: 10px;
+      margin-top: 3px;
+      font-size: 0.6rem;
+      color: #666;
+    }
+
+    .mgs-pattern-stats span {
+      color: #949494;
+    }
+
+    .mgs-objects {
+      flex: 0.9;
+      min-height: 80px;
+    }
+
+    .mgs-object-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+      gap: 4px;
+      overflow-y: auto;
+      max-height: 120px;
+    }
+
+    .mgs-object-item {
+      background: #151518;
+      padding: 5px 7px;
+      border-radius: 3px;
+      border-left: 3px solid #4a4a4a;
+      font-size: 0.65rem;
+    }
+
+    .mgs-object-item.high {
+      border-color: #e6ff1a;
+    }
+
+    .mgs-object-item.overloaded {
+      border-color: #ff6b6b;
+      background: #1a1215;
+    }
+
+    .mgs-object-item strong {
+      display: block;
+      margin-bottom: 1px;
+      color: #fff;
+      font-size: 0.6rem;
+    }
+
+    .mgs-object-item span {
+      color: #949494;
+    }
+
+    .mat-metal {
+      border-color: #ffd700 !important;
+    }
+
+    .mat-mineral {
+      border-color: #b38adb !important;
+    }
+
+    .mat-bio {
+      border-color: #5cff9d !important;
+    }
+
+    .mgs-events {
+      flex: 1;
+      min-height: 80px;
+    }
+
+    .mgs-event-list {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      overflow-y: auto;
+      max-height: 120px;
+    }
+
+    .mgs-event {
+      font-size: 0.6rem;
+      padding: 2px 0;
+      border-bottom: 1px solid #151518;
+    }
+
+    .mgs-event.overload {
+      color: #ff6b6b;
+    }
+
+    .mgs-event.recovery {
+      color: #5cff9d;
+    }
+
+    .mgs-event.pattern {
+      color: #e6ff1a;
+    }
+
+    .mgs-event .step {
+      color: #555;
+      margin-right: 5px;
+    }
+
+    .mgs-physics {
+      flex: 0;
+      min-height: auto;
+    }
+
+    .mgs-slider-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+
+    .mgs-slider-row label {
+      font-size: 0.6rem;
+      color: #666;
+      min-width: 50px;
+    }
+
+    .mgs-slider-row input[type="range"] {
+      flex: 1;
+      height: 4px;
+      -webkit-appearance: none;
+      appearance: none;
+      background: #222;
+      border-radius: 2px;
+    }
+
+    .mgs-slider-row input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 10px;
+      height: 10px;
+      background: #1a5cff;
+      border-radius: 50%;
+      cursor: pointer;
+    }
+
+    .mgs-slider-row span {
+      font-size: 0.6rem;
+      color: #949494;
+      min-width: 30px;
+      text-align: right;
+    }
+
+    .mgs-modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.8);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .mgs-modal-overlay.open {
+      display: flex;
+    }
+
+    .mgs-modal {
+      background: #0d0d10;
+      border: 1px solid #2a2a2a;
+      border-radius: 8px;
+      padding: 20px;
+      min-width: 300px;
+    }
+
+    .mgs-modal h2 {
+      color: #e6ff1a;
+      font-size: 1rem;
+      margin-bottom: 16px;
+    }
+
+    .mgs-modal-buttons {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .mgs-modal-buttons button {
+      background: #1a1a1a;
+      color: #c4c4c4;
+      border: 1px solid #333;
+      padding: 10px 16px;
+      font-family: inherit;
+      font-size: 0.8rem;
+      cursor: pointer;
+      border-radius: 4px;
+      text-align: left;
+    }
+
+    .mgs-modal-buttons button:hover {
+      background: #222;
+      border-color: #1a5cff;
+    }
+
+    .mgs-modal-buttons button:focus {
+      outline: 2px solid #e6ff1a;
+      outline-offset: 2px;
+    }
+
+    .mgs-modal-buttons button small {
+      display: block;
+      color: #666;
+      font-size: 0.7rem;
+      margin-top: 2px;
+    }
+
+    .mgs-modal-close {
+      margin-top: 16px;
+      background: #333 !important;
+      text-align: center !important;
+    }
+
+    ::-webkit-scrollbar {
+      width: 5px;
+      height: 5px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: #0a0a0c;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: #333;
+      border-radius: 3px;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="mgs-app">
+    <header class="mgs-header">
+      <h1>MindGraphSim</h1>
+      <span class="version">v1.0 Lab</span>
+      <p>Physics Config, Roles, Levin Patterns</p>
+    </header>
+    <div class="mgs-toolbar">
+      <div class="mgs-toolbar-group">
+        <label>Scene</label>
+        <select id="scene-select">
+          <option value="single_core_two_anchors" selected>Idea + Anchors</option>
+          <option value="blank">Blank</option>
+          <option value="research_session">Research Mesh</option>
+          <option value="conflict_resolution">Tension Bridge</option>
+          <option value="brainstorm_mesh">Brainstorm Net</option>
+        </select>
+      </div>
+      <div class="mgs-toolbar-group">
+        <label>Profile</label>
         <select id="profile-select">
-          <option value="neurotypical_baseline">Neurotypical Baseline</option>
-          <option value="autistic_intense_connectivity" selected>Autistic Intense Connectivity</option>
-          <option value="adhd_scatter_focus">ADHD Scatter Focus</option>
-          <option value="twice_exceptional">2E Twice Exceptional</option>
+          <option value="general" selected>General</option>
+          <option value="autistic">Autistic Intensity</option>
+          <option value="adhd">ADHD Scatter-Focus</option>
+          <option value="meditative">Meditative</option>
+        </select>
+      </div>
+      <div class="mgs-toolbar-group">
+        <label>Model</label>
+        <select id="model-select">
+          <option value="baseline" selected>Baseline</option>
         </select>
       </div>
 
-      <h2>Telemetry</h2>
-      <div class="stats">
-        <div class="stat">
-          <div class="stat-label">Step</div>
-          <div class="stat-value" id="stat-step">0</div>
-        </div>
-        <div class="stat">
-          <div class="stat-label">Objects</div>
-          <div class="stat-value" id="stat-objects">0</div>
-        </div>
-        <div class="stat">
-          <div class="stat-label">Patterns</div>
-          <div class="stat-value" id="stat-patterns">0</div>
-        </div>
-        <div class="stat">
-          <div class="stat-label">Overloads</div>
-          <div class="stat-value" id="stat-overloads">0</div>
-        </div>
-        <div class="stat">
-          <div class="stat-label">Kinetic Energy</div>
-          <div class="stat-value" id="stat-ke">0</div>
-        </div>
-        <div class="stat">
-          <div class="stat-label">Activation</div>
-          <div class="stat-value" id="stat-activation">0</div>
-        </div>
+      <div class="mgs-toolbar-group">
+        <label>Regime</label>
+        <select id="regime-select">
+          <option value="thought_laboratory" selected>Thought Lab</option>
+          <option value="storm">Storm</option>
+          <option value="calm_rehearsal">Calm Rehearsal</option>
+        </select>
       </div>
-
-      <h2>ASCII View</h2>
-      <div id="ascii-view"></div>
-
-      <h2>Event Log</h2>
-      <div id="log"></div>
+      <div class="mgs-toolbar-group">
+        <label>Lens</label>
+        <select id="frame-select">
+          <!-- Frame selection populated dynamically by lab_view.ts -->
+          <option value="frame_open_exploration">Open Exploration</option>
+        </select>
+      </div>
+      <div class="mgs-toolbar-group">
+        <label>Scenarios</label>
+        <!-- Placeholder for stress test if moved -->
+        <button id="btn-reset" class="secondary" title="Reset Scene">Reset</button>
+      </div>
+      <div class="mgs-toolbar-group">
+        <button id="btn-noise" class="secondary">+Noise</button>
+      </div>
+      <div class="mgs-toolbar-group">
+        <button id="btn-catalog">Catalog</button>
+      </div>
     </div>
+    <div class="mgs-timeline">
+      <div class="mgs-timeline-controls">
+        <button id="btn-record" title="Record" style="color: #ff4d4d;">●</button>
+        <button id="btn-back" title="Step Back">◀</button>
+        <!-- Mapped to Step -->
+        <button id="btn-step" class="secondary">Step</button>
+        <button id="btn-play" class="active" title="Play/Pause">▶</button>
+        <button id="btn-forward" title="Step Forward">▶▶</button>
+      </div>
+      <div class="mgs-scrubber">
+        <input type="range" id="scrubber" min="0" max="0" value="0">
+        <span class="mgs-scrubber-label" id="scrubber-label">Step 0 / 0</span>
+      </div>
+      <span class="mgs-mode-badge live" id="mode-badge">LIVE</span>
+    </div>
+    <main class="mgs-main">
+      <section class="mgs-graph-shell">
+        <canvas id="graph-canvas"></canvas>
+        <div class="mgs-hud" id="safety-hud">
+          <div class="mgs-hud-title">Observer Console</div>
+          <div class="mgs-hud-row"><span class="mgs-hud-label">Density</span><span class="mgs-hud-value"
+              id="stat-density">0.00</span> <span class="mgs-mode-badge" id="hud-density-status"
+              style="font-size:0.5rem">CALM</span></div>
+          <div class="mgs-hud-row"><span class="mgs-hud-label">Overloads</span>
+            <span class="mgs-hud-value" id="stat-overloads">0</span>
+          </div>
+          <div class="mgs-hud-row"><span class="mgs-hud-label">Patterns</span><span class="mgs-hud-value"
+              id="stat-patterns">0</span></div>
+          <div class="mgs-hud-row"><span class="mgs-hud-label">Profile</span><span class="mgs-hud-value"
+              id="stat-profile">open_neutral</span></div>
+          <div class="mgs-hud-row"><span class="mgs-hud-label">Frame</span><span class="mgs-hud-value"
+              id="stat-frame">frame_open_exploration</span></div>
+          <div class="mgs-hud-row"><span class="mgs-hud-label">Objects</span><span class="mgs-hud-value"
+              id="stat-objects">0</span></div>
+          <div class="mgs-hud-row"><span class="mgs-hud-label">Activation</span><span class="mgs-hud-value"
+              id="stat-activation">0.00</span></div>
+        </div>
 
-    <script type="module" src="/src/demo.ts"></script>
-  </body>
+        <div class="mgs-lens-indicator" id="lens-indicator" style="display: none;">Lens: <strong
+            id="lens-name">None</strong></div>
+      </section>
+      <aside class="mgs-side">
+        <div class="mgs-card mgs-patterns">
+          <h3>Patterns <span class="count" id="pattern-count">0</span></h3>
+          <div class="mgs-pattern-list" id="pattern-list"></div>
+        </div>
+        <div class="mgs-card mgs-objects">
+          <h3>Objects <span class="count" id="object-count">0</span></h3>
+          <div class="mgs-object-grid" id="object-list"></div>
+        </div>
+        <div class="mgs-card mgs-events">
+          <h3>Events</h3>
+          <div class="mgs-event-list" id="event-log"></div>
+        </div>
+      </aside>
+    </main>
+  </div>
+
+  <div id="catalog-modal" class="mgs-modal-overlay">
+    <div class="mgs-catalog-modal">
+      <!-- Content handled by JS if implemented, or simple placeholder -->
+    </div>
+  </div>
+
+  <script type="module" src="/src/lab_view.ts"></script>
+</body>
+
 </html>

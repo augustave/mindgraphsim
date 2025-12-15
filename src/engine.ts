@@ -39,7 +39,7 @@ const PROFILE_REGISTRY = listDomainProfiles().map(p => ({
   physics: {
     noise_scale: p.novelty_gain,          // Approximate mapping
     gravity_scale: p.gravitation_multiplier,
-    safety_scale: 1.0,                    // Default or calculate from overload_cut
+    safety_scale: p.safety_multiplier,
     activation_gain: p.base_connectivity_gain,
     friction_gain: p.drag_coefficient       // Drag becomes Friction
   },
@@ -88,7 +88,7 @@ let currentModel = MODEL_REGISTRY[0];
  * Applies a model variant (logic/physics overrides).
  * Should be called AFTER applyProfile to ensure overrides take precedence.
  */
-function applyModel(modelId) {
+export function applyModel(modelId) {
   const m = MODEL_REGISTRY.find(x => x.id === modelId);
   if (!m) { console.warn(`Model ${modelId} not found`); return; }
   currentModel = m;
@@ -112,7 +112,7 @@ function applyModel(modelId) {
  * Returns available models from the registry.
  * @returns {Array} List of {id, label, description}
  */
-function listModels() {
+export function listModels() {
   return MODEL_REGISTRY;
 }
 
@@ -204,6 +204,10 @@ const FRAME_REGISTRY = [
   }
 ];
 
+export function listFrames() {
+  return FRAME_REGISTRY;
+}
+
 let currentFrame = FRAME_REGISTRY[0]; // Default: Open Exploration
 let currentContext = { profileId: 'open_neutral', frameId: 'frame_open_exploration' };
 
@@ -252,7 +256,8 @@ const REGIMES = {
 };
 
 // [S3 T1] External Input Adapter
-const InputAdapter = {
+// S7.2 Adapters exported
+export const InputAdapter = {
   events: [],
   loadEvents: (events) => {
     InputAdapter.events = events.sort((a, b) => {
@@ -408,7 +413,7 @@ const Recorder = {
         ...meta,
         date: new Date().toISOString(),
         profile: currentContext.profileId || 'unknown',
-        model: currentContext.modelId || 'baseline',
+        model: (currentContext as any).modelId || 'baseline',
         frame: currentContext.frameId || 'unknown',
         regime: currentRegime || 'unknown'
       },
@@ -665,7 +670,8 @@ const WORLD = { springLength: 120, interactionRadius: 60, centerPull: 0.8, maxAc
 
 // Physics Config (runtime-adjustable)
 // FR3: Rebalanced for more spatial breathing room
-let physicsConfig = {
+// S7.2 Physics Config Export
+export let physicsConfig = {
   time_step: 0.016,
   global_damping: 0.90,  // FR3: Slightly less damping for more motion
   gravity: { enabled: true, cx: 0.5, cy: 0.5, strength: 0.12 }, // FR3: Weaker gravity allows spreading
@@ -729,7 +735,8 @@ const TRAIL_CONFIG = {
 };
 
 // State
-let state = {
+// S7.2 State Export
+export let state = {
   objects: [],
   edges: [],
   patterns: [],  // Levin-style motifs
@@ -754,8 +761,9 @@ let waveEdgeMembership = new Map(); // edgeKey -> { waveId, tintStart, intensity
 let showTrails = TRAIL_CONFIG.enabledByDefault;
 
 let timeline = [], timelineIndex = -1, mode = 'live';
-let patternIdCounter = 0, selectedPatternId = null, levinPatternIdCounter = 0;
-let hudMetrics = { globalOverloadIndex: 0, clusterStressCount: 0, recoveryTrend: 'stable', overloadHistory: [], densityStatus: 'calm' };
+export let patternIdCounter = 0; let selectedPatternId = null, levinPatternIdCounter = 0;
+// S7.2 Metrics Export
+export let hudMetrics = { globalOverloadIndex: 0, clusterStressCount: 0, recoveryTrend: 'stable', overloadHistory: [], densityStatus: 'calm' };
 let currentLens = 'none', currentRegime = 'thought_laboratory';
 // profile is now set by applyProfile, initialized later
 
@@ -781,11 +789,12 @@ let regimeTransition = {
 // PRD R5: Pattern overlay toggle
 let showPatternOverlays = true;
 
-const canvas = document.getElementById('graph-canvas');
-const ctx = canvas.getContext('2d');
+const canvas = document.getElementById('graph-canvas') as HTMLCanvasElement;
+const ctx = (canvas as HTMLCanvasElement).getContext('2d');
+if (!ctx) throw new Error('Could not get 2d context');
 let canvasWidth = 800, canvasHeight = 600, dpr = 1;
 
-function resizeCanvas() {
+export function resize() {
   const parent = canvas.parentElement;
   if (!parent) return;
   dpr = window.devicePixelRatio || 1;
@@ -796,7 +805,7 @@ function resizeCanvas() {
   const base = Math.min(canvasWidth, canvasHeight);
   WORLD.springLength = base * 0.12; WORLD.interactionRadius = base * 0.08;
 }
-window.addEventListener('resize', resizeCanvas);
+window.addEventListener('resize', resize);
 
 function createObject(id, label, materialId, nx, ny, role = 'Default') {
   const mat = MATERIALS[materialId] || MATERIALS.iron;
@@ -829,7 +838,7 @@ function createEdge(id, sourceId, targetId, weight = 1) {
   };
 }
 
-function loadScene(sceneId) {
+export function loadScene(sceneId) {
   const scene = SCENES[sceneId]; if (!scene) return;
   state.objects = scene.objects.map(o => createObject(o.id, o.label, o.material, o.nx, o.ny, o.role || 'Default'));
   state.edges = scene.edges.map((e, i) => createEdge(`e${i}`, e.source, e.target, e.weight || 1));
@@ -881,24 +890,24 @@ function applyRegime(regimeId, smooth = false) {
  * Lists all available physics profiles (presets).
  * @returns {Array} List of profile objects with id, label, description.
  */
-function listProfiles() { return PROFILE_REGISTRY.map(p => ({ id: p.id, label: p.label, description: p.description, category: p.category })); }
+export function listProfiles() { return PROFILE_REGISTRY.map(p => ({ id: p.id, label: p.label, description: p.description, category: p.category })); }
 
 /**
  * Lists all available interpretive frames.
  * @returns {Array} List of frame objects with id, label, explanation.
  */
-function listFrames() { return FRAME_REGISTRY.map(f => ({ id: f.id, label: f.label, description: f.description, tags: f.tags })); }
+
 
 /**
  * Gets the current active context.
  * @returns {Object} { profileId, frameId }
  */
-function getCurrentContext() {
+export function getCurrentContext() {
   return {
     ...currentContext,
     modelId: currentModel ? currentModel.id : 'baseline', // S4: Track active model
     metrics: {
-      patternDensity: state.metrics.patternDensity || 0,
+      patternDensity: (state.metrics as any).patternDensity || 0,
       densityStatus: hudMetrics.densityStatus || 'calm'
     },
     overloads: state.overloads,       // S4: Live overload tracking
@@ -911,7 +920,7 @@ function getCurrentContext() {
  * Updates base physics configuration (noise, gravity, safety) using profile multipliers.
  * @param {string} profileId - ID of the profile to apply
  */
-function applyProfile(profileId) {
+export function applyProfile(profileId) {
   const p = PROFILE_REGISTRY.find(x => x.id === profileId);
   if (!p) { console.warn(`Profile ${profileId} not found`); return; }
 
@@ -925,8 +934,8 @@ function applyProfile(profileId) {
   state.ambient.safety = Math.min(1, BASE_PHYSICS_CONFIG.safety_base * phys.safety_scale);
 
   // These might be used in logic elsewhere
-  physicsConfig.activation_gain_multiplier = phys.activation_gain;
-  physicsConfig.friction_gain_multiplier = phys.friction_gain;
+  (physicsConfig as any).activation_gain_multiplier = phys.activation_gain;
+  (physicsConfig as any).friction_gain_multiplier = phys.friction_gain;
 
   addLog(`Profile applied: ${p.label}`, 'info');
 }
@@ -936,7 +945,7 @@ function applyProfile(profileId) {
  * DOES NOT alter physics. affects pattern detection weights and HUD visuals only.
  * @param {string} frameId - ID of the frame to apply
  */
-function applyFrame(frameId) {
+export function applyFrame(frameId) {
   const f = FRAME_REGISTRY.find(x => x.id === frameId);
   if (!f) { console.warn(`Frame ${frameId} not found`); return; }
 
@@ -963,7 +972,7 @@ function updateRegimeTransition() {
   physicsConfig.gravity.strength = from.gravity_strength + (to.gravity_strength - from.gravity_strength) * ease;
   physicsConfig.collision.elasticity = from.collision_elasticity + (to.collision_elasticity - from.collision_elasticity) * ease;
   physicsConfig.noise.base_strength = from.noise_base + (to.noise_base - from.noise_base) * ease;
-  state.ambient.safety = regimeTransition.fromSafety + (regimeTransition.toSafety - regimeTransition.fromSafety) * ease;
+  state.ambient.safety = regimeTransition.fromSafety + (regimeTransition.toSafety - regimeTransition.toSafety) * ease;
 
   if (t >= 1) {
     regimeTransition.active = false;
@@ -991,10 +1000,11 @@ function restoreSnapshot(index) {
 }
 
 function updateScrubber() {
-  const scrubber = document.getElementById('scrubber'), label = document.getElementById('scrubber-label');
-  scrubber.max = Math.max(0, timeline.length - 1); scrubber.value = timelineIndex;
+  const scrubber = document.getElementById('scrubber') as HTMLInputElement;
+  const label = document.getElementById('scrubber-label');
+  if (scrubber) { scrubber.max = String(Math.max(0, timeline.length - 1)); scrubber.value = String(timelineIndex); }
   const currentStep = timeline[timelineIndex]?.step || 0, maxStep = timeline[timeline.length - 1]?.step || 0;
-  label.textContent = `Step ${currentStep} / ${maxStep}`;
+  if (label) label.textContent = `Step ${currentStep} / ${maxStep}`;
 }
 
 function updateModeUI() {
@@ -1017,7 +1027,7 @@ function calculatePatternOverlap(nodeIdsA, nodeIdsB) {
 }
 
 // Pattern Tracker (S2.1)
-function detectPatterns() {
+export function detectPatterns() {
   state.objects.forEach(o => { o.activationHistory.push(o.activation); if (o.activationHistory.length > 50) o.activationHistory.shift(); });
 
   // Detect loops (oscillating activation patterns)
@@ -1514,7 +1524,7 @@ function pruneAndRankPatterns() {
 }
 
 // Safety HUD (S2.5) - PRD R5: Risk probability based on regime and history
-function updateHUDMetrics() {
+export function updateHUDMetrics() {
   const regime = REGIMES[currentRegime];
 
   // Calculate risk factors
@@ -1539,7 +1549,7 @@ function updateHUDMetrics() {
 
   // S2-T5: Pattern Density Metric
   state.metrics = state.metrics || {};
-  state.metrics.patternDensity = state.patterns.length / Math.max(1, state.objects.length);
+  (state.metrics as any).patternDensity = state.patterns.length / Math.max(1, state.objects.length);
 
   // Track history for trend
   hudMetrics.overloadHistory.push(hudMetrics.globalOverloadIndex);
@@ -1557,10 +1567,10 @@ function updateHUDMetrics() {
   }
 
   // S2.5 Frame Logic: Density Status
-  if (state.metrics.patternDensity !== undefined) {
+  if ((state.metrics as any).patternDensity !== undefined) {
     // PRD Thresholds: Calm < 1.5 <= Busy < 3.0 <= Saturated
-    if (state.metrics.patternDensity >= 3.0) hudMetrics.densityStatus = 'saturated';
-    else if (state.metrics.patternDensity >= 1.5) hudMetrics.densityStatus = 'busy';
+    if ((state.metrics as any).patternDensity >= 3.0) hudMetrics.densityStatus = 'saturated';
+    else if ((state.metrics as any).patternDensity >= 1.5) hudMetrics.densityStatus = 'busy';
     else hudMetrics.densityStatus = 'calm';
   }
 
@@ -1571,7 +1581,7 @@ function updateHUDMetrics() {
 }
 
 // Physics (v1.0 - role-based, regime-aware)
-function integratePhysics(dt) {
+export function integratePhysics(dt) {
   const objs = state.objects;
   const cx = canvasWidth * physicsConfig.gravity.cx;
   const cy = canvasHeight * physicsConfig.gravity.cy;
@@ -1706,7 +1716,7 @@ function integratePhysics(dt) {
     const maxAccel = 800;
     if (accMag > maxAccel) { ax *= maxAccel / accMag; ay *= maxAccel / accMag; }
 
-    const frictionScaler = physicsConfig.friction_gain_multiplier !== undefined ? physicsConfig.friction_gain_multiplier : 1.0;
+    const frictionScaler = (physicsConfig as any).friction_gain_multiplier !== undefined ? (physicsConfig as any).friction_gain_multiplier : 1.0;
     // Effective damping: scale the friction component (1 - damping)
     const effectiveDamping = 1.0 - ((1.0 - physicsConfig.global_damping) * frictionScaler);
 
@@ -1791,7 +1801,7 @@ function integratePhysics(dt) {
 }
 
 // T2: Apply semantic role positional bias for topology readability
-function applySemanticPositionalBias() {
+export function applySemanticPositionalBias() {
   const centerY = canvasHeight * 0.5;
   const biasStrength = physicsConfig.layout.verticalBiasStrength || 0.08;
 
@@ -1856,7 +1866,7 @@ function applySemanticPositionalBias() {
 
 // PRD R3: Pattern Influence - patterns as stress agents that reshape the field
 // High-energy patterns actively maintain structure and affect node activation/motion
-function applyPatternInfluence() {
+export function applyPatternInfluence() {
   const time = performance.now() / 1000;
   const regime = REGIMES[currentRegime];
   const baseInfluence = regime.patternInfluence || 1.0;
@@ -2015,7 +2025,7 @@ function applyPatternInfluence() {
 }
 
 // Energy and Stress update (Levin-style)
-function updateEnergyStress(dt) {
+export function updateEnergyStress(dt) {
   const regime = REGIMES[currentRegime];
   state.objects.forEach(o => {
     const roleEffect = ROLE_EFFECTS[o.role] || ROLE_EFFECTS.Default;
@@ -2041,7 +2051,7 @@ function updateEnergyStress(dt) {
   });
 }
 
-function ambientStep(dt) {
+export function ambientStep(dt) {
   // Noise decays faster when safety is high
   state.ambient.noise *= Math.pow(0.95 + state.ambient.safety * 0.04, dt * 60);
   state.ambient.noise = Math.max(0.05, state.ambient.noise); // Minimum ambient noise
@@ -2077,7 +2087,7 @@ function ambientStep(dt) {
   });
 }
 
-function activationStep(dt) {
+export function activationStep(dt) {
   // T1: Enhanced activation dynamics with semantic role support
   const regime = REGIMES[currentRegime];
   const varianceBoost = profile.activationVarianceBoost || 0.15;
@@ -2144,7 +2154,7 @@ function activationStep(dt) {
     o.activation += (resting - o.activation) * effectiveDecay * dt * 60;
 
     // T1: Bridge special behavior - track tension between Positions and CommonGround
-    if (semCfg && semCfg.tracksTension) {
+    if (semCfg && (semCfg as any).tracksTension) {
       const tensionTarget = 0.3 + tensionDiff * 1.2; // Maps diff to activation
       o.activation += (tensionTarget - o.activation) * 0.03 * dt * 60;
     }
@@ -2714,8 +2724,10 @@ function drawMaterialShape(ctx, x, y, r, material) {
 
 // UI Updates
 function updateUI() {
-  document.getElementById('pattern-count').textContent = state.patterns.length;
-  document.getElementById('object-count').textContent = state.objects.length;
+  const elPatterns = document.getElementById('pattern-count');
+  if (elPatterns) elPatterns.textContent = String(state.patterns.length);
+  const elObjects = document.getElementById('object-count');
+  if (elObjects) elObjects.textContent = String(state.objects.length);
 
   // Patterns panel
   const patternList = document.getElementById('pattern-list');
@@ -2730,7 +2742,7 @@ function updateUI() {
     </div>
   `}).join('');
   patternList.querySelectorAll('.mgs-pattern-item').forEach(el => {
-    el.onclick = () => { selectedPatternId = selectedPatternId === el.dataset.id ? null : el.dataset.id; updateUI(); };
+    (el as HTMLElement).onclick = () => { selectedPatternId = selectedPatternId === (el as HTMLElement).dataset.id ? null : (el as HTMLElement).dataset.id; updateUI(); };
   });
 
   // Objects panel
@@ -2751,7 +2763,7 @@ function updateUI() {
     document.getElementById('hud-overload').textContent = hudMetrics.globalOverloadIndex.toFixed(2);
 
     // S4 Observer HUD Updates
-    const densityVal = state.metrics.patternDensity || 0;
+    const densityVal = (state.metrics as any).patternDensity || 0;
     const densityStatus = hudMetrics.densityStatus || 'calm';
 
     const elDensity = document.getElementById('hud-density');
@@ -2764,7 +2776,7 @@ function updateUI() {
     }
 
     const elPatterns = document.getElementById('hud-patterns');
-    if (elPatterns) elPatterns.textContent = state.patterns.length;
+    if (elPatterns) elPatterns.textContent = String(state.patterns.length);
 
     const elModel = document.getElementById('hud-model');
     if (elModel) elModel.textContent = currentModel ? currentModel.id : 'baseline';
@@ -2783,7 +2795,8 @@ function updateUI() {
 
 
   }
-  document.getElementById('hud-clusters').textContent = hudMetrics.clusterStressCount;
+  const hudClusters = document.getElementById('hud-clusters');
+  if (hudClusters) hudClusters.textContent = String(hudMetrics.clusterStressCount);
   const trendEl = document.getElementById('hud-trend');
   trendEl.textContent = hudMetrics.recoveryTrend === 'up' ? '↑' : hudMetrics.recoveryTrend === 'down' ? '↓' : '→';
   trendEl.className = `mgs-trend ${hudMetrics.recoveryTrend}`;
@@ -2807,7 +2820,7 @@ function updateUI() {
   // T3: Pattern age bars in pattern list
   const patternItems = patternList.querySelectorAll('.mgs-pattern-item');
   patternItems.forEach(el => {
-    const p = state.patterns.find(pat => pat.id === el.dataset.id);
+    const p = state.patterns.find(pat => pat.id === (el as HTMLElement).dataset.id);
     if (p && p.age) {
       const ageBar = document.createElement('div');
       const agePercent = Math.min(100, (p.age / 500) * 100); // 500 steps = full bar
@@ -2815,45 +2828,44 @@ function updateUI() {
       el.appendChild(ageBar);
     }
     // FR4: Add hover handler for pattern highlighting
-    el.onmouseenter = () => { hoveredPatternId = el.dataset.id; };
-    el.onmouseleave = () => { hoveredPatternId = null; };
+    (el as HTMLElement).onmouseenter = () => { hoveredPatternId = (el as HTMLElement).dataset.id; };
+    (el as HTMLElement).onmouseleave = () => { hoveredPatternId = null; };
   });
 
   // T1: Wave Sparkline
-  const sparklineCanvas = document.getElementById('wave-sparkline');
+  const sparklineCanvas = document.getElementById('wave-sparkline') as HTMLCanvasElement;
   if (sparklineCanvas && state.waveAmplitudeHistory) {
     const sctx = sparklineCanvas.getContext('2d');
-    const w = sparklineCanvas.width, h = sparklineCanvas.height;
-    sctx.fillStyle = '#1a1a1a';
-    sctx.fillRect(0, 0, w, h);
+    if (sctx) {
+      const w = sparklineCanvas.width, h = sparklineCanvas.height;
+      sctx.fillStyle = '#1a1a1a';
+      sctx.fillRect(0, 0, w, h);
 
-    if (state.waveAmplitudeHistory.length > 1) {
-      sctx.beginPath();
-      sctx.strokeStyle = '#7ab3ff';
-      sctx.lineWidth = 1.5;
-      const data = state.waveAmplitudeHistory;
-      const step = w / (WAVE_VISUAL_CONFIG.sparklineLength - 1);
-      data.forEach((val, i) => {
-        const x = i * step;
-        const y = h - (val * h * 0.9) - 2;
-        if (i === 0) sctx.moveTo(x, y);
-        else sctx.lineTo(x, y);
-      });
-      sctx.stroke();
+      if (state.waveAmplitudeHistory.length > 1) {
+        sctx.beginPath();
+        sctx.strokeStyle = '#7ab3ff';
+        sctx.lineWidth = 1.5;
+        const data = state.waveAmplitudeHistory;
+        const step = w / (WAVE_VISUAL_CONFIG.sparklineLength - 1);
+        data.forEach((val, i) => {
+          const x = i * step;
+          const y = h - (val * h * 0.9) - 2;
+          if (i === 0) sctx.moveTo(x, y);
+          else sctx.lineTo(x, y);
+        });
+        sctx.stroke();
 
-      // Fill under curve
-      sctx.lineTo((data.length - 1) * step, h);
-      sctx.lineTo(0, h);
-      sctx.closePath();
-      sctx.fillStyle = 'rgba(122, 179, 255, 0.2)';
-      sctx.fill();
+        // Fill under curve
+        sctx.lineTo((data.length - 1) * step, h);
+        sctx.fill();
+      }
     }
   }
 
   updateScrubber();
 }
 
-function addLog(msg, type = 'info') { logEntries.unshift({ step: state.step, msg, type }); if (logEntries.length > 100) logEntries.pop(); }
+function addLog(msg: string, type = 'info') { logEntries.unshift({ step: state.step, msg, type }); if (logEntries.length > 100) logEntries.pop(); }
 
 // Levin-style Pattern Detectors
 function runLevinPatternDetectors() {
@@ -3000,7 +3012,7 @@ function runLevinPatternDetectors() {
 }
 
 // Animation Loop
-function animate() {
+export function drawGraph() {
   const now = performance.now();
   let dt = (now - lastTime) / 1000; lastTime = now;
   dt = Math.min(dt, 0.05) * speedMultiplier; // Apply speed multiplier
@@ -3053,7 +3065,8 @@ function animate() {
 
   render();
   if (state.step % 3 === 0) updateUI();
-  requestAnimationFrame(animate);
+  // resize(); // Managed by UI
+  // animate(); // Managed by UI
 }
 
 // Export (S2.6)
@@ -3074,7 +3087,7 @@ function exportSummary() {
 }
 
 function exportImage() {
-  const dataUrl = canvas.toDataURL('image/png');
+  const dataUrl = (canvas as HTMLCanvasElement).toDataURL('image/png');
   const a = document.createElement('a'); a.href = dataUrl; a.download = `mindgraphsim-graph-${Date.now()}.png`; a.click();
 }
 
@@ -3087,7 +3100,8 @@ document.getElementById('btn-play').onclick = () => {
 };
 document.getElementById('btn-back').onclick = () => { if (timelineIndex > 0) { mode = 'replay'; restoreSnapshot(timelineIndex - 1); updateModeUI(); updateUI(); } };
 document.getElementById('btn-forward').onclick = () => { if (timelineIndex < timeline.length - 1) { mode = 'replay'; restoreSnapshot(timelineIndex + 1); updateModeUI(); updateUI(); } };
-document.getElementById('scrubber').oninput = (e) => { mode = 'replay'; restoreSnapshot(parseInt(e.target.value)); updateModeUI(); updateUI(); };
+const scrubberEl = document.getElementById('scrubber');
+if (scrubberEl) scrubberEl.oninput = (e) => { mode = 'replay'; restoreSnapshot(parseInt((e.target as HTMLInputElement).value)); updateModeUI(); updateUI(); };
 document.getElementById('btn-noise').onclick = () => { state.ambient.noise = Math.min(1, state.ambient.noise + 0.15); addLog('+Noise injected'); };
 document.getElementById('btn-safety').onclick = () => { state.ambient.safety = Math.min(1, state.ambient.safety + 0.1); addLog('+Safety increased'); };
 document.getElementById('btn-shake').onclick = () => {
@@ -3117,12 +3131,15 @@ document.getElementById('btn-pattern-overlay').onclick = () => {
   addLog(`Pattern overlays: ${showPatternOverlays ? 'ON' : 'OFF'}`, 'info');
 };
 document.getElementById('slider-speed').oninput = (e) => {
-  speedMultiplier = e.target.value / 100;
+  speedMultiplier = parseInt((e.target as HTMLInputElement).value) / 100;
   document.getElementById('val-speed').textContent = speedMultiplier.toFixed(1) + 'x';
 };
-document.getElementById('scene-select').onchange = (e) => { loadScene(e.target.value); };
-document.getElementById('profile-select').onchange = (e) => {
-  applyProfile(e.target.value); // Use API instead of direct access
+const sceneSelect = document.getElementById('scene-select') as HTMLSelectElement;
+if (sceneSelect) sceneSelect.onchange = (e) => { loadScene((e.target as HTMLSelectElement).value); };
+
+const profileSelect = document.getElementById('profile-select') as HTMLSelectElement;
+if (profileSelect) profileSelect.onchange = (e) => {
+  applyProfile((e.target as HTMLSelectElement).value); // Use API instead of direct access
   addLog(`Profile: ${currentContext.profileId}`);
 };
 
@@ -3138,37 +3155,55 @@ if (modelSelect) {
     modelSelect.appendChild(opt);
   });
   modelSelect.onchange = (e) => {
-    applyModel(e.target.value);
+    applyModel((e.target as HTMLSelectElement).value);
     updateUI();
   };
 }
 
-document.getElementById('lens-select').onchange = (e) => { currentLens = e.target.value; updateUI(); };
-document.getElementById('regime-select').onchange = (e) => {
+const lensSelect = document.getElementById('lens-select') as HTMLSelectElement;
+if (lensSelect) lensSelect.onchange = (e) => { currentLens = (e.target as HTMLSelectElement).value; updateUI(); };
+const regimeSelect = document.getElementById('regime-select') as HTMLSelectElement;
+if (regimeSelect) regimeSelect.onchange = (e) => {
   // S3 Task D: Use smooth transitions for regime changes
-  applyRegime(e.target.value, true);
-  document.getElementById('hud-regime').textContent = REGIMES[e.target.value].name;
+  const val = (e.target as HTMLSelectElement).value;
+  applyRegime(val, true);
+  const hudRegime = document.getElementById('hud-regime');
+  if (hudRegime) hudRegime.textContent = REGIMES[val as keyof typeof REGIMES].name;
   // Don't update sliders immediately - they'll update during transition
 };
-document.getElementById('slider-gravity').oninput = (e) => {
-  physicsConfig.gravity.strength = e.target.value / 100;
-  document.getElementById('val-gravity').textContent = physicsConfig.gravity.strength.toFixed(2);
+const sliderGravity = document.getElementById('slider-gravity');
+if (sliderGravity) sliderGravity.oninput = (e) => {
+  physicsConfig.gravity.strength = parseInt((e.target as HTMLInputElement).value) / 100;
+  const val = document.getElementById('val-gravity');
+  if (val) val.textContent = physicsConfig.gravity.strength.toFixed(2);
 };
-document.getElementById('slider-damping').oninput = (e) => {
-  physicsConfig.global_damping = e.target.value / 100;
-  document.getElementById('val-damping').textContent = physicsConfig.global_damping.toFixed(2);
+const sliderDamping = document.getElementById('slider-damping');
+if (sliderDamping) sliderDamping.oninput = (e) => {
+  physicsConfig.global_damping = parseInt((e.target as HTMLInputElement).value) / 100;
+  const val = document.getElementById('val-damping');
+  if (val) val.textContent = physicsConfig.global_damping.toFixed(2);
 };
-document.getElementById('slider-noise').oninput = (e) => {
-  physicsConfig.noise.base_strength = e.target.value / 100;
-  document.getElementById('val-noise').textContent = physicsConfig.noise.base_strength.toFixed(2);
+const sliderNoise = document.getElementById('slider-noise');
+if (sliderNoise) sliderNoise.oninput = (e) => {
+  physicsConfig.noise.base_strength = parseInt((e.target as HTMLInputElement).value) / 100;
+  const val = document.getElementById('val-noise');
+  if (val) val.textContent = physicsConfig.noise.base_strength.toFixed(2);
 };
 function updatePhysicsSliders() {
-  document.getElementById('slider-gravity').value = physicsConfig.gravity.strength * 100;
-  document.getElementById('val-gravity').textContent = physicsConfig.gravity.strength.toFixed(2);
-  document.getElementById('slider-damping').value = physicsConfig.global_damping * 100;
-  document.getElementById('val-damping').textContent = physicsConfig.global_damping.toFixed(2);
-  document.getElementById('slider-noise').value = physicsConfig.noise.base_strength * 100;
-  document.getElementById('val-noise').textContent = physicsConfig.noise.base_strength.toFixed(2);
+  const sGravity = document.getElementById('slider-gravity') as HTMLInputElement;
+  if (sGravity) sGravity.value = String(physicsConfig.gravity.strength * 100);
+  const vGravity = document.getElementById('val-gravity');
+  if (vGravity) vGravity.textContent = physicsConfig.gravity.strength.toFixed(2);
+
+  const sDamping = document.getElementById('slider-damping') as HTMLInputElement;
+  if (sDamping) sDamping.value = String(physicsConfig.global_damping * 100);
+  const vDamping = document.getElementById('val-damping');
+  if (vDamping) vDamping.textContent = physicsConfig.global_damping.toFixed(2);
+
+  const sNoise = document.getElementById('slider-noise') as HTMLInputElement;
+  if (sNoise) sNoise.value = String(physicsConfig.noise.base_strength * 100);
+  const vNoise = document.getElementById('val-noise');
+  if (vNoise) vNoise.textContent = physicsConfig.noise.base_strength.toFixed(2);
 }
 document.getElementById('btn-export').onclick = () => { document.getElementById('export-modal').classList.add('open'); };
 document.getElementById('export-close').onclick = () => { document.getElementById('export-modal').classList.remove('open'); };
@@ -3780,10 +3815,10 @@ function runBridgeRegressionTest(targetSteps = 10000, callback) {
 }
 
 // Init
-resizeCanvas();
+// resizeCanvas();
 loadScene('single_core_two_anchors');
 document.getElementById('btn-play').textContent = '⏸'; // Start paused icon since running=true
-animate();
+// animate();
 
 // Expose functions globally
 window.runT4Tests = runT4Tests;
@@ -3833,7 +3868,7 @@ const ReplaySystem = {
     document.getElementById('mode-badge').className = 'mgs-mode-badge live';
     document.getElementById('mode-badge').textContent = 'LIVE';
     document.getElementById('btn-play').textContent = '⏸';
-    animate(); // Resume loop if stopped
+    // animate(); // Resume loop if stopped
   },
 
   seek: (index) => {
@@ -3891,7 +3926,7 @@ const NarrativeGenerator = {
 
     let sumDensity = 0;
     let maxDensity = 0;
-    const patternCounts = {};
+    const patternCounts: Record<string, number> = {};
 
     buffer.forEach(frame => {
       const d = frame.metrics.patternDensity || 0;
@@ -3923,8 +3958,9 @@ const NarrativeGenerator = {
     const newOverloads = Math.max(0, endOverloads - startOverloads);
 
     let mood = 'calm';
-    if (avgDensity > 1.5) mood = 'busy';
-    if (avgDensity > 3.0) mood = 'chaotic';
+    const avgDensityNum = parseFloat(avgDensity);
+    if (avgDensityNum > 1.5) mood = 'busy';
+    if (avgDensityNum > 3.0) mood = 'chaotic';
 
     return `Session Summary:
 The session was generally ${mood} (Avg Density: ${avgDensity}, Peak: ${peakDensity}).
@@ -3945,10 +3981,12 @@ if (btnRecord) {
       btnRecord.textContent = '●';
       // Update scrubber range
       const meta = Recorder.getMetadata();
-      const scrub = document.getElementById('scrubber');
-      scrub.max = meta.count - 1;
-      scrub.value = meta.count - 1;
-      scrub.disabled = false;
+      const scrub = document.getElementById('scrubber') as HTMLInputElement;
+      if (scrub) {
+        scrub.max = String(meta.count - 1);
+        scrub.value = String(meta.count - 1);
+        scrub.disabled = false;
+      }
     } else {
       Recorder.start();
       btnRecord.textContent = '■';
@@ -3994,7 +4032,7 @@ if (btnAnalyze) {
 const scrubber = document.getElementById('scrubber');
 if (scrubber) {
   scrubber.oninput = (e) => {
-    const idx = parseInt(e.target.value);
+    const idx = parseInt((e.target as HTMLInputElement).value);
     ReplaySystem.seek(idx);
     document.getElementById('scrubber-label').textContent = `Frame ${idx}`;
   };
@@ -4018,7 +4056,8 @@ function renderCatalogUI() {
   Object.values(PROFILE_REGISTRY).forEach(p => {
     const card = document.createElement('div');
     card.className = 'mgs-catalog-card';
-    card.innerHTML = `<h4>${p.name}</h4><p>${p.description || 'No description.'}</p>`;
+    card.innerHTML = `<h4>${p.label}</h4><p>${p.description || 'No description.'}</p>`;
+    // @ts-ignore
     if (p.noise_base > 0.5) card.innerHTML += `<span class="tag">High Noise</span>`;
 
     card.onclick = () => {
@@ -4033,7 +4072,7 @@ function renderCatalogUI() {
   Object.values(FRAME_REGISTRY).forEach(f => {
     const card = document.createElement('div');
     card.className = 'mgs-catalog-card';
-    card.innerHTML = `<h4>${f.name}</h4><p>${f.description || 'No description.'}</p>`;
+    card.innerHTML = `<h4>${f.label}</h4><p>${f.description || 'No description.'}</p>`;
 
     card.onclick = () => {
       applyFrame(f.id);
@@ -4075,7 +4114,7 @@ btnPlay.onclick = () => {
     // Toggle pause/play
     running = !running;
     btnPlay.textContent = running ? '⏸' : '▶';
-    if (running) animate();
+    // if (running) animate();
   }
 };
 
@@ -4099,7 +4138,7 @@ function runStressTest() {
 
     // Apply selected model if any
     const modelSelect = document.getElementById('model-select');
-    if (modelSelect) applyModel(modelSelect.value);
+    if (modelSelect) applyModel((modelSelect as HTMLSelectElement).value);
 
     // 2. Prepare Runner
     running = false; // Stop live loop
@@ -4142,7 +4181,7 @@ function runStressTest() {
       } catch (e) {
         console.error(e);
         addLog('Error running stress test', 'error');
-        running = true; animate();
+        running = true; // animate();
       }
     }, 50);
   }
@@ -4156,9 +4195,26 @@ window.getCurrentContext = getCurrentContext;
 window.Recorder = Recorder;
 window.ReplaySystem = ReplaySystem;
 
+// S7 Migration: Expose Core API & State to Window (for Tests and Demo)
+window.state = state;
+window.physicsConfig = physicsConfig;
+window.hudMetrics = hudMetrics;
+window.patternIdCounter = patternIdCounter;
 
+window.loadScene = loadScene;
+window.applyProfile = applyProfile;
+window.applyFrame = applyFrame;
 
+window.integratePhysics = integratePhysics;
+window.applySemanticPositionalBias = applySemanticPositionalBias;
+window.applyPatternInfluence = applyPatternInfluence;
+window.updateEnergyStress = updateEnergyStress;
+// S7.1 UI Hook Exports
+// S7.1 UI Hook Exports
+(window as any).drawGraph = drawGraph;
+(window as any).resizeCanvas = resize;
 
-
-
-
+export {
+  resize as resizeCanvas,
+  FRAME_REGISTRY
+};

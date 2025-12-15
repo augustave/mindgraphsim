@@ -31,17 +31,14 @@ global.performance = { now: () => Date.now() };
 global.requestAnimationFrame = (cb) => { };
 
 // --- Load Engine ---
-const enginePath = path.join(__dirname, '../mgs-engine.js');
-let engineCode = fs.readFileSync(enginePath, 'utf8');
+const enginePath = path.join(__dirname, '../dist/mgs-engine.js');
+const engineCode = fs.readFileSync(enginePath, 'utf8');
 
-// Expose internal globals for testing
-engineCode = engineCode.replace(/let state =/g, 'global.state =');
-engineCode = engineCode.replace(/let patternIdCounter =/g, 'global.patternIdCounter =');
-engineCode = engineCode.replace(/let hudMetrics =/g, 'global.hudMetrics =');
-engineCode = engineCode.replace(/let currentContext =/g, 'global.currentContext =');
-engineCode = engineCode.replace(/let physicsConfig =/g, 'global.physicsConfig =');
-
-try { eval(engineCode); } catch (e) { console.error("Error loading engine:", e); process.exit(1); }
+try {
+    eval(engineCode);
+    // S7 Migration: Sync window globals to generic globals for test harness compatibility
+    Object.assign(global, global.document.defaultView || global.window);
+} catch (e) { console.error("Error loading engine:", e); process.exit(1); }
 
 // --- CLI Args ---
 const args = process.argv.slice(2);

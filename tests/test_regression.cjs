@@ -48,17 +48,16 @@ global.performance = { now: () => Date.now() };
 global.requestAnimationFrame = (cb) => { }; // No actual loop
 
 // Load engine
-const enginePath = '/Users/taoconrad/Documents/GitHub 4/mindgraphsim/mgs-engine.js';
-let engineCode = fs.readFileSync(enginePath, 'utf8');
+// Load engine
+const enginePath = path.join(__dirname, '../dist/mgs-engine.js');
+const engineCode = fs.readFileSync(enginePath, 'utf8');
 
-// Expose internal state variables to global scope for testing
-engineCode = engineCode.replace(/let state =/g, 'global.state =');
-engineCode = engineCode.replace(/let patternIdCounter =/g, 'global.patternIdCounter =');
-engineCode = engineCode.replace(/let hudMetrics =/g, 'global.hudMetrics =');
-// Expose functions if needed, or just eval
-// runBridgeRegressionTest is a function, so it will be in scope after eval if we don't block it.
-// But mostly good to attach it to global if we want to call it safely.
-// Actually, top-level functions in eval should be available.
+try {
+    eval(engineCode);
+    Object.assign(global, global.document.defaultView || global.window);
+} catch (e) {
+    console.error("Error loading engine:", e);
+}
 
 try {
     eval(engineCode);

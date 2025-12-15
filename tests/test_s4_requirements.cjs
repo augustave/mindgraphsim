@@ -34,15 +34,14 @@ global.confirm = () => true; // Auto-confirm scenario run
 global.alert = () => { };
 
 // --- Load Engine ---
-const enginePath = path.join(__dirname, '../mgs-engine.js');
-let engineCode = fs.readFileSync(enginePath, 'utf8');
+// --- Load Engine ---
+const enginePath = path.join(__dirname, '../dist/mgs-engine.js');
+const engineCode = fs.readFileSync(enginePath, 'utf8');
 
-// Hook globals
-engineCode = engineCode.replace(/let physicsConfig =/g, 'global.physicsConfig =');
-engineCode = engineCode.replace(/var running =/g, 'global.running =');
-engineCode = engineCode.replace(/let running =/g, 'global.running =');
-engineCode = engineCode.replace(/let state =/g, 'global.state =');  // Expose state
-try { eval(engineCode); } catch (e) { console.error("Error loading engine:", e); process.exit(1); }
+try {
+    eval(engineCode);
+    Object.assign(global, global.document.defaultView || global.window);
+} catch (e) { console.error("Error loading engine:", e); process.exit(1); }
 
 // --- Exports ---
 const engineListModels = window.listModels;

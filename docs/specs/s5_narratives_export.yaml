@@ -9,7 +9,7 @@ context:
       summary: "Observer Console, Model Switcher, Scenario Runner, Recorder/Replay complete."
       artifacts:
         - "Recorder/ReplaySystem in mgs-engine.js"
-        - "Observer Console HUD in standalone-demo.html"
+        - "Observer Console HUD in index.html (Lab UI)"
         - "tests/test_s4_requirements.cjs"
 
 goals:

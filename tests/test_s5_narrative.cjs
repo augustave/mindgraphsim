@@ -32,17 +32,14 @@ global.Blob = class Blob { };
 global.URL = { createObjectURL: () => '', revokeObjectURL: () => { } };
 
 // --- Load Engine ---
-const enginePath = path.join(__dirname, '../mgs-engine.js');
-let engineCode = fs.readFileSync(enginePath, 'utf8');
-engineCode = engineCode.replace(/let state =/g, 'global.state =');  // Expose state for init if needed
-engineCode = engineCode.replace(/const NarrativeGenerator =/g, 'global.NarrativeGenerator ='); // Expose
+// --- Load Engine ---
+const enginePath = path.join(__dirname, '../dist/mgs-engine.js');
+const engineCode = fs.readFileSync(enginePath, 'utf8');
 
-// Disable auto-run
-// engineCode = engineCode.replace(/resizeCanvas\(\);/g, '// resizeCanvas();'); // Let them run if mock works
-// engineCode = engineCode.replace(/loadScene\('single_core_two_anchors'\);/g, '// loadScene();');
-// engineCode = engineCode.replace(/animate\(\);/g, '// animate();');
-
-try { eval(engineCode); } catch (e) { console.error("Error loading engine:", e); process.exit(1); }
+try {
+    eval(engineCode);
+    Object.assign(global, global.document.defaultView || global.window);
+} catch (e) { console.error("Error loading engine:", e); process.exit(1); }
 
 // --- Test Data ---
 const mockBuffer = [
