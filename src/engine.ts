@@ -3092,48 +3092,74 @@ function exportImage() {
 }
 
 // Event Handlers
-document.getElementById('btn-play').onclick = () => {
-  if (mode === 'replay') { mode = 'live'; running = true; }
-  else { running = !running; }
-  document.getElementById('btn-play').textContent = running ? '⏸' : '▶';
-  updateModeUI();
-};
-document.getElementById('btn-back').onclick = () => { if (timelineIndex > 0) { mode = 'replay'; restoreSnapshot(timelineIndex - 1); updateModeUI(); updateUI(); } };
-document.getElementById('btn-forward').onclick = () => { if (timelineIndex < timeline.length - 1) { mode = 'replay'; restoreSnapshot(timelineIndex + 1); updateModeUI(); updateUI(); } };
+const btnPlayLegacy = document.getElementById('btn-play');
+if (btnPlayLegacy) {
+  btnPlayLegacy.onclick = () => {
+    if (mode === 'replay') { mode = 'live'; running = true; }
+    else { running = !running; }
+    btnPlayLegacy.textContent = running ? '⏸' : '▶';
+    updateModeUI();
+  };
+}
+const btnBackLegacy = document.getElementById('btn-back');
+if (btnBackLegacy) {
+  btnBackLegacy.onclick = () => {
+    if (timelineIndex > 0) { mode = 'replay'; restoreSnapshot(timelineIndex - 1); updateModeUI(); updateUI(); }
+  };
+}
+const btnForwardLegacy = document.getElementById('btn-forward');
+if (btnForwardLegacy) {
+  btnForwardLegacy.onclick = () => {
+    if (timelineIndex < timeline.length - 1) { mode = 'replay'; restoreSnapshot(timelineIndex + 1); updateModeUI(); updateUI(); }
+  };
+}
 const scrubberEl = document.getElementById('scrubber');
 if (scrubberEl) scrubberEl.oninput = (e) => { mode = 'replay'; restoreSnapshot(parseInt((e.target as HTMLInputElement).value)); updateModeUI(); updateUI(); };
-document.getElementById('btn-noise').onclick = () => { state.ambient.noise = Math.min(1, state.ambient.noise + 0.15); addLog('+Noise injected'); };
-document.getElementById('btn-safety').onclick = () => { state.ambient.safety = Math.min(1, state.ambient.safety + 0.1); addLog('+Safety increased'); };
-document.getElementById('btn-shake').onclick = () => {
-  // Shake: inject a brief noise spike across all nodes
-  state.objects.forEach(o => {
-    if (!o.pinned) {
-      o.vx += (Math.random() - 0.5) * 200;
-      o.vy += (Math.random() - 0.5) * 200;
-    }
-  });
-  state.ambient.noise = Math.min(1, state.ambient.noise + 0.3);
-  addLog('🌊 Shake!', 'info');
-};
+const btnNoiseLegacy = document.getElementById('btn-noise');
+if (btnNoiseLegacy) btnNoiseLegacy.onclick = () => { state.ambient.noise = Math.min(1, state.ambient.noise + 0.15); addLog('+Noise injected'); };
+const btnSafetyLegacy = document.getElementById('btn-safety');
+if (btnSafetyLegacy) btnSafetyLegacy.onclick = () => { state.ambient.safety = Math.min(1, state.ambient.safety + 0.1); addLog('+Safety increased'); };
+const btnShakeLegacy = document.getElementById('btn-shake');
+if (btnShakeLegacy) {
+  btnShakeLegacy.onclick = () => {
+    // Shake: inject a brief noise spike across all nodes
+    state.objects.forEach(o => {
+      if (!o.pinned) {
+        o.vx += (Math.random() - 0.5) * 200;
+        o.vy += (Math.random() - 0.5) * 200;
+      }
+    });
+    state.ambient.noise = Math.min(1, state.ambient.noise + 0.3);
+    addLog('🌊 Shake!', 'info');
+  };
+}
 // S3-T1: Trails toggle for stability visualization
-document.getElementById('btn-trails').onclick = () => {
-  showTrails = !showTrails;
-  const btn = document.getElementById('btn-trails');
-  btn.classList.toggle('active', showTrails);
-  addLog(`Trails: ${showTrails ? 'ON' : 'OFF'}`, 'info');
-};
+const btnTrailsLegacy = document.getElementById('btn-trails');
+if (btnTrailsLegacy) {
+  btnTrailsLegacy.onclick = () => {
+    showTrails = !showTrails;
+    btnTrailsLegacy.classList.toggle('active', showTrails);
+    addLog(`Trails: ${showTrails ? 'ON' : 'OFF'}`, 'info');
+  };
+}
 // PRD R5: Pattern overlay toggle
-document.getElementById('btn-pattern-overlay').onclick = () => {
-  showPatternOverlays = !showPatternOverlays;
-  const btn = document.getElementById('btn-pattern-overlay');
-  btn.classList.toggle('active', showPatternOverlays);
-  btn.textContent = showPatternOverlays ? '👁 Patterns' : '👁‍🗨 Patterns';
-  addLog(`Pattern overlays: ${showPatternOverlays ? 'ON' : 'OFF'}`, 'info');
-};
-document.getElementById('slider-speed').oninput = (e) => {
-  speedMultiplier = parseInt((e.target as HTMLInputElement).value) / 100;
-  document.getElementById('val-speed').textContent = speedMultiplier.toFixed(1) + 'x';
-};
+const btnPatternOverlayLegacy = document.getElementById('btn-pattern-overlay');
+if (btnPatternOverlayLegacy) {
+  btnPatternOverlayLegacy.onclick = () => {
+    showPatternOverlays = !showPatternOverlays;
+    btnPatternOverlayLegacy.classList.toggle('active', showPatternOverlays);
+    btnPatternOverlayLegacy.textContent = showPatternOverlays ? '👁 Patterns' : '👁‍🗨 Patterns';
+    addLog(`Pattern overlays: ${showPatternOverlays ? 'ON' : 'OFF'}`, 'info');
+  };
+}
+const sliderSpeedLegacy = document.getElementById('slider-speed');
+if (sliderSpeedLegacy) {
+  sliderSpeedLegacy.oninput = (e) => {
+    speedMultiplier = parseInt((e.target as HTMLInputElement).value) / 100;
+    const valSpeed = document.getElementById('val-speed');
+    if (valSpeed) valSpeed.textContent = speedMultiplier.toFixed(1) + 'x';
+  };
+}
 const sceneSelect = document.getElementById('scene-select') as HTMLSelectElement;
 if (sceneSelect) sceneSelect.onchange = (e) => { loadScene((e.target as HTMLSelectElement).value); };
 
