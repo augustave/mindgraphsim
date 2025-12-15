@@ -53,6 +53,10 @@ function initLabUI() {
     loadScene('conflict_resolution');
     applyProfile('autistic_intense_connectivity'); // Default per index.html
     applyFrame('frame_open_exploration');
+    // Prime the canvas with a handful of steps so visitors see motion immediately
+    stepSimulation(12);
+    drawGraph();
+    updateDOMHUD();
 
     // 3. UI Bindings
     setupControls();
