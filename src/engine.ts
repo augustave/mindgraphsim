@@ -2731,7 +2731,8 @@ function updateUI() {
 
   // Patterns panel
   const patternList = document.getElementById('pattern-list');
-  patternList.innerHTML = state.patterns.map(p => {
+  if (patternList) {
+    patternList.innerHTML = state.patterns.map(p => {
     const age = p.age ?? p.lifetime_steps ?? 0;
     const energy = p.energy ?? p.average_stress ?? 0;
     const influence = p.influence ?? (p.object_ids ? p.object_ids.length / state.objects.length : 0);
@@ -2741,18 +2742,21 @@ function updateUI() {
       <div class="mgs-pattern-stats">Age: <span>${age}</span> | Energy: <span>${energy.toFixed(2)}</span> | Influence: <span>${influence.toFixed(2)}</span></div>
     </div>
   `}).join('');
-  patternList.querySelectorAll('.mgs-pattern-item').forEach(el => {
-    (el as HTMLElement).onclick = () => { selectedPatternId = selectedPatternId === (el as HTMLElement).dataset.id ? null : (el as HTMLElement).dataset.id; updateUI(); };
-  });
+    patternList.querySelectorAll('.mgs-pattern-item').forEach(el => {
+      (el as HTMLElement).onclick = () => { selectedPatternId = selectedPatternId === (el as HTMLElement).dataset.id ? null : (el as HTMLElement).dataset.id; updateUI(); };
+    });
+  }
 
   // Objects panel
-  document.getElementById('object-list').innerHTML = state.objects.map(o => {
+  const objectList = document.getElementById('object-list');
+  if (objectList) objectList.innerHTML = state.objects.map(o => {
     const matClass = `mat-${o.mat.category}`, stateClass = o.overloaded ? 'overloaded' : (o.activation > 0.7 ? 'high' : '');
     return `<div class="mgs-object-item ${matClass} ${stateClass}"><strong>${o.label}</strong><span>${o.activation.toFixed(2)}</span></div>`;
   }).join('');
 
   // Events
-  document.getElementById('event-log').innerHTML = logEntries.slice(0, 30).map(e => `<div class="mgs-event ${e.type}"><span class="step">[${e.step}]</span>${e.msg}</div>`).join('');
+  const eventLog = document.getElementById('event-log');
+  if (eventLog) eventLog.innerHTML = logEntries.slice(0, 30).map(e => `<div class="mgs-event ${e.type}"><span class="step">[${e.step}]</span>${e.msg}</div>`).join('');
 
   // HUD
   // HUD
@@ -2798,13 +2802,17 @@ function updateUI() {
   const hudClusters = document.getElementById('hud-clusters');
   if (hudClusters) hudClusters.textContent = String(hudMetrics.clusterStressCount);
   const trendEl = document.getElementById('hud-trend');
-  trendEl.textContent = hudMetrics.recoveryTrend === 'up' ? '↑' : hudMetrics.recoveryTrend === 'down' ? '↓' : '→';
-  trendEl.className = `mgs-trend ${hudMetrics.recoveryTrend}`;
+  if (trendEl) {
+    trendEl.textContent = hudMetrics.recoveryTrend === 'up' ? '↑' : hudMetrics.recoveryTrend === 'down' ? '↓' : '→';
+    trendEl.className = `mgs-trend ${hudMetrics.recoveryTrend}`;
+  }
 
   // Lens indicator
   const lensIndicator = document.getElementById('lens-indicator');
-  if (currentLens !== 'none') { lensIndicator.style.display = 'block'; document.getElementById('lens-name').textContent = currentLens.replace(/_/g, ' '); }
-  else { lensIndicator.style.display = 'none'; }
+  if (lensIndicator) {
+    if (currentLens !== 'none') { lensIndicator.style.display = 'block'; const lensName = document.getElementById('lens-name'); if (lensName) lensName.textContent = currentLens.replace(/_/g, ' '); }
+    else { lensIndicator.style.display = 'none'; }
+  }
 
   // T3: Pattern Timeline
   const timelineList = document.getElementById('pattern-timeline-list');
@@ -3091,151 +3099,155 @@ function exportImage() {
   const a = document.createElement('a'); a.href = dataUrl; a.download = `mindgraphsim-graph-${Date.now()}.png`; a.click();
 }
 
-// Event Handlers
-const btnPlayLegacy = document.getElementById('btn-play');
-if (btnPlayLegacy) {
-  btnPlayLegacy.onclick = () => {
-    if (mode === 'replay') { mode = 'live'; running = true; }
-    else { running = !running; }
-    btnPlayLegacy.textContent = running ? '⏸' : '▶';
-    updateModeUI();
+const legacyControls = document.getElementById('btn-safety');
+if (legacyControls) {
+  const btnPlayLegacy = document.getElementById('btn-play');
+  if (btnPlayLegacy) {
+    btnPlayLegacy.onclick = () => {
+      if (mode === 'replay') { mode = 'live'; running = true; }
+      else { running = !running; }
+      btnPlayLegacy.textContent = running ? '⏸' : '▶';
+      updateModeUI();
+    };
+  }
+  const btnBackLegacy = document.getElementById('btn-back');
+  if (btnBackLegacy) {
+    btnBackLegacy.onclick = () => {
+      if (timelineIndex > 0) { mode = 'replay'; restoreSnapshot(timelineIndex - 1); updateModeUI(); updateUI(); }
+    };
+  }
+  const btnForwardLegacy = document.getElementById('btn-forward');
+  if (btnForwardLegacy) {
+    btnForwardLegacy.onclick = () => {
+      if (timelineIndex < timeline.length - 1) { mode = 'replay'; restoreSnapshot(timelineIndex + 1); updateModeUI(); updateUI(); }
+    };
+  }
+  const scrubberEl = document.getElementById('scrubber');
+  if (scrubberEl) scrubberEl.oninput = (e) => { mode = 'replay'; restoreSnapshot(parseInt((e.target as HTMLInputElement).value)); updateModeUI(); updateUI(); };
+  const btnNoiseLegacy = document.getElementById('btn-noise');
+  if (btnNoiseLegacy) btnNoiseLegacy.onclick = () => { state.ambient.noise = Math.min(1, state.ambient.noise + 0.15); addLog('+Noise injected'); };
+  const btnSafetyLegacy = document.getElementById('btn-safety');
+  if (btnSafetyLegacy) btnSafetyLegacy.onclick = () => { state.ambient.safety = Math.min(1, state.ambient.safety + 0.1); addLog('+Safety increased'); };
+  const btnShakeLegacy = document.getElementById('btn-shake');
+  if (btnShakeLegacy) {
+    btnShakeLegacy.onclick = () => {
+      state.objects.forEach(o => {
+        if (!o.pinned) {
+          o.vx += (Math.random() - 0.5) * 200;
+          o.vy += (Math.random() - 0.5) * 200;
+        }
+      });
+      state.ambient.noise = Math.min(1, state.ambient.noise + 0.3);
+      addLog('🌊 Shake!', 'info');
+    };
+  }
+  const btnTrailsLegacy = document.getElementById('btn-trails');
+  if (btnTrailsLegacy) {
+    btnTrailsLegacy.onclick = () => {
+      showTrails = !showTrails;
+      btnTrailsLegacy.classList.toggle('active', showTrails);
+      addLog(`Trails: ${showTrails ? 'ON' : 'OFF'}`, 'info');
+    };
+  }
+  const btnPatternOverlayLegacy = document.getElementById('btn-pattern-overlay');
+  if (btnPatternOverlayLegacy) {
+    btnPatternOverlayLegacy.onclick = () => {
+      showPatternOverlays = !showPatternOverlays;
+      btnPatternOverlayLegacy.classList.toggle('active', showPatternOverlays);
+      btnPatternOverlayLegacy.textContent = showPatternOverlays ? '👁 Patterns' : '👁‍🗨 Patterns';
+      addLog(`Pattern overlays: ${showPatternOverlays ? 'ON' : 'OFF'}`, 'info');
+    };
+  }
+  const sliderSpeedLegacy = document.getElementById('slider-speed');
+  if (sliderSpeedLegacy) {
+    sliderSpeedLegacy.oninput = (e) => {
+      speedMultiplier = parseInt((e.target as HTMLInputElement).value) / 100;
+      const valSpeed = document.getElementById('val-speed');
+      if (valSpeed) valSpeed.textContent = speedMultiplier.toFixed(1) + 'x';
+    };
+  }
+  const sceneSelect = document.getElementById('scene-select') as HTMLSelectElement;
+  if (sceneSelect) sceneSelect.onchange = (e) => { loadScene((e.target as HTMLSelectElement).value); };
+
+  const profileSelect = document.getElementById('profile-select') as HTMLSelectElement;
+  if (profileSelect) profileSelect.onchange = (e) => {
+    applyProfile((e.target as HTMLSelectElement).value);
+    addLog(`Profile: ${currentContext.profileId}`);
   };
-}
-const btnBackLegacy = document.getElementById('btn-back');
-if (btnBackLegacy) {
-  btnBackLegacy.onclick = () => {
-    if (timelineIndex > 0) { mode = 'replay'; restoreSnapshot(timelineIndex - 1); updateModeUI(); updateUI(); }
-  };
-}
-const btnForwardLegacy = document.getElementById('btn-forward');
-if (btnForwardLegacy) {
-  btnForwardLegacy.onclick = () => {
-    if (timelineIndex < timeline.length - 1) { mode = 'replay'; restoreSnapshot(timelineIndex + 1); updateModeUI(); updateUI(); }
-  };
-}
-const scrubberEl = document.getElementById('scrubber');
-if (scrubberEl) scrubberEl.oninput = (e) => { mode = 'replay'; restoreSnapshot(parseInt((e.target as HTMLInputElement).value)); updateModeUI(); updateUI(); };
-const btnNoiseLegacy = document.getElementById('btn-noise');
-if (btnNoiseLegacy) btnNoiseLegacy.onclick = () => { state.ambient.noise = Math.min(1, state.ambient.noise + 0.15); addLog('+Noise injected'); };
-const btnSafetyLegacy = document.getElementById('btn-safety');
-if (btnSafetyLegacy) btnSafetyLegacy.onclick = () => { state.ambient.safety = Math.min(1, state.ambient.safety + 0.1); addLog('+Safety increased'); };
-const btnShakeLegacy = document.getElementById('btn-shake');
-if (btnShakeLegacy) {
-  btnShakeLegacy.onclick = () => {
-    // Shake: inject a brief noise spike across all nodes
-    state.objects.forEach(o => {
-      if (!o.pinned) {
-        o.vx += (Math.random() - 0.5) * 200;
-        o.vy += (Math.random() - 0.5) * 200;
-      }
+
+  const modelSelect = document.getElementById('model-select');
+  if (modelSelect) {
+    modelSelect.innerHTML = '';
+    MODEL_REGISTRY.forEach(m => {
+      const opt = document.createElement('option');
+      opt.value = m.id;
+      opt.textContent = m.label;
+      if (m.id === 'baseline') opt.selected = true;
+      modelSelect.appendChild(opt);
     });
-    state.ambient.noise = Math.min(1, state.ambient.noise + 0.3);
-    addLog('🌊 Shake!', 'info');
-  };
-}
-// S3-T1: Trails toggle for stability visualization
-const btnTrailsLegacy = document.getElementById('btn-trails');
-if (btnTrailsLegacy) {
-  btnTrailsLegacy.onclick = () => {
-    showTrails = !showTrails;
-    btnTrailsLegacy.classList.toggle('active', showTrails);
-    addLog(`Trails: ${showTrails ? 'ON' : 'OFF'}`, 'info');
-  };
-}
-// PRD R5: Pattern overlay toggle
-const btnPatternOverlayLegacy = document.getElementById('btn-pattern-overlay');
-if (btnPatternOverlayLegacy) {
-  btnPatternOverlayLegacy.onclick = () => {
-    showPatternOverlays = !showPatternOverlays;
-    btnPatternOverlayLegacy.classList.toggle('active', showPatternOverlays);
-    btnPatternOverlayLegacy.textContent = showPatternOverlays ? '👁 Patterns' : '👁‍🗨 Patterns';
-    addLog(`Pattern overlays: ${showPatternOverlays ? 'ON' : 'OFF'}`, 'info');
-  };
-}
-const sliderSpeedLegacy = document.getElementById('slider-speed');
-if (sliderSpeedLegacy) {
-  sliderSpeedLegacy.oninput = (e) => {
-    speedMultiplier = parseInt((e.target as HTMLInputElement).value) / 100;
-    const valSpeed = document.getElementById('val-speed');
-    if (valSpeed) valSpeed.textContent = speedMultiplier.toFixed(1) + 'x';
-  };
-}
-const sceneSelect = document.getElementById('scene-select') as HTMLSelectElement;
-if (sceneSelect) sceneSelect.onchange = (e) => { loadScene((e.target as HTMLSelectElement).value); };
+    modelSelect.onchange = (e) => {
+      applyModel((e.target as HTMLSelectElement).value);
+      updateUI();
+    };
+  }
 
-const profileSelect = document.getElementById('profile-select') as HTMLSelectElement;
-if (profileSelect) profileSelect.onchange = (e) => {
-  applyProfile((e.target as HTMLSelectElement).value); // Use API instead of direct access
-  addLog(`Profile: ${currentContext.profileId}`);
-};
-
-// S4: Model Selector
-const modelSelect = document.getElementById('model-select');
-if (modelSelect) {
-  modelSelect.innerHTML = '';
-  MODEL_REGISTRY.forEach(m => {
-    const opt = document.createElement('option');
-    opt.value = m.id;
-    opt.textContent = m.label;
-    if (m.id === 'baseline') opt.selected = true;
-    modelSelect.appendChild(opt);
-  });
-  modelSelect.onchange = (e) => {
-    applyModel((e.target as HTMLSelectElement).value);
-    updateUI();
+  const lensSelect = document.getElementById('lens-select') as HTMLSelectElement;
+  if (lensSelect) lensSelect.onchange = (e) => { currentLens = (e.target as HTMLSelectElement).value; updateUI(); };
+  const regimeSelect = document.getElementById('regime-select') as HTMLSelectElement;
+  if (regimeSelect) regimeSelect.onchange = (e) => {
+    const val = (e.target as HTMLSelectElement).value;
+    applyRegime(val, true);
+    const hudRegime = document.getElementById('hud-regime');
+    if (hudRegime) hudRegime.textContent = REGIMES[val as keyof typeof REGIMES].name;
   };
+  const sliderGravity = document.getElementById('slider-gravity');
+  if (sliderGravity) sliderGravity.oninput = (e) => {
+    physicsConfig.gravity.strength = parseInt((e.target as HTMLInputElement).value) / 100;
+    const val = document.getElementById('val-gravity');
+    if (val) val.textContent = physicsConfig.gravity.strength.toFixed(2);
+  };
+  const sliderDamping = document.getElementById('slider-damping');
+  if (sliderDamping) sliderDamping.oninput = (e) => {
+    physicsConfig.global_damping = parseInt((e.target as HTMLInputElement).value) / 100;
+    const val = document.getElementById('val-damping');
+    if (val) val.textContent = physicsConfig.global_damping.toFixed(2);
+  };
+  const sliderNoise = document.getElementById('slider-noise');
+  if (sliderNoise) sliderNoise.oninput = (e) => {
+    physicsConfig.noise.base_strength = parseInt((e.target as HTMLInputElement).value) / 100;
+    const val = document.getElementById('val-noise');
+    if (val) val.textContent = physicsConfig.noise.base_strength.toFixed(2);
+  };
+  function updatePhysicsSliders() {
+    const sGravity = document.getElementById('slider-gravity') as HTMLInputElement;
+    if (sGravity) sGravity.value = String(physicsConfig.gravity.strength * 100);
+    const vGravity = document.getElementById('val-gravity');
+    if (vGravity) vGravity.textContent = physicsConfig.gravity.strength.toFixed(2);
+
+    const sDamping = document.getElementById('slider-damping') as HTMLInputElement;
+    if (sDamping) sDamping.value = String(physicsConfig.global_damping * 100);
+    const vDamping = document.getElementById('val-damping');
+    if (vDamping) vDamping.textContent = physicsConfig.global_damping.toFixed(2);
+
+    const sNoise = document.getElementById('slider-noise') as HTMLInputElement;
+    if (sNoise) sNoise.value = String(physicsConfig.noise.base_strength * 100);
+    const vNoise = document.getElementById('val-noise');
+    if (vNoise) vNoise.textContent = physicsConfig.noise.base_strength.toFixed(2);
+  }
+  const btnExport = document.getElementById('btn-export');
+  const exportModal = document.getElementById('export-modal');
+  if (btnExport && exportModal) {
+    btnExport.onclick = () => { exportModal.classList.add('open'); };
+    const btnClose = document.getElementById('export-close');
+    if (btnClose) btnClose.onclick = () => { exportModal.classList.remove('open'); };
+    const btnJson = document.getElementById('export-json');
+    if (btnJson) btnJson.onclick = () => { exportStateJSON(); exportModal.classList.remove('open'); };
+    const btnSummary = document.getElementById('export-summary');
+    if (btnSummary) btnSummary.onclick = () => { exportSummary(); exportModal.classList.remove('open'); };
+    const btnImage = document.getElementById('export-image');
+    if (btnImage) btnImage.onclick = () => { exportImage(); exportModal.classList.remove('open'); };
+  }
 }
-
-const lensSelect = document.getElementById('lens-select') as HTMLSelectElement;
-if (lensSelect) lensSelect.onchange = (e) => { currentLens = (e.target as HTMLSelectElement).value; updateUI(); };
-const regimeSelect = document.getElementById('regime-select') as HTMLSelectElement;
-if (regimeSelect) regimeSelect.onchange = (e) => {
-  // S3 Task D: Use smooth transitions for regime changes
-  const val = (e.target as HTMLSelectElement).value;
-  applyRegime(val, true);
-  const hudRegime = document.getElementById('hud-regime');
-  if (hudRegime) hudRegime.textContent = REGIMES[val as keyof typeof REGIMES].name;
-  // Don't update sliders immediately - they'll update during transition
-};
-const sliderGravity = document.getElementById('slider-gravity');
-if (sliderGravity) sliderGravity.oninput = (e) => {
-  physicsConfig.gravity.strength = parseInt((e.target as HTMLInputElement).value) / 100;
-  const val = document.getElementById('val-gravity');
-  if (val) val.textContent = physicsConfig.gravity.strength.toFixed(2);
-};
-const sliderDamping = document.getElementById('slider-damping');
-if (sliderDamping) sliderDamping.oninput = (e) => {
-  physicsConfig.global_damping = parseInt((e.target as HTMLInputElement).value) / 100;
-  const val = document.getElementById('val-damping');
-  if (val) val.textContent = physicsConfig.global_damping.toFixed(2);
-};
-const sliderNoise = document.getElementById('slider-noise');
-if (sliderNoise) sliderNoise.oninput = (e) => {
-  physicsConfig.noise.base_strength = parseInt((e.target as HTMLInputElement).value) / 100;
-  const val = document.getElementById('val-noise');
-  if (val) val.textContent = physicsConfig.noise.base_strength.toFixed(2);
-};
-function updatePhysicsSliders() {
-  const sGravity = document.getElementById('slider-gravity') as HTMLInputElement;
-  if (sGravity) sGravity.value = String(physicsConfig.gravity.strength * 100);
-  const vGravity = document.getElementById('val-gravity');
-  if (vGravity) vGravity.textContent = physicsConfig.gravity.strength.toFixed(2);
-
-  const sDamping = document.getElementById('slider-damping') as HTMLInputElement;
-  if (sDamping) sDamping.value = String(physicsConfig.global_damping * 100);
-  const vDamping = document.getElementById('val-damping');
-  if (vDamping) vDamping.textContent = physicsConfig.global_damping.toFixed(2);
-
-  const sNoise = document.getElementById('slider-noise') as HTMLInputElement;
-  if (sNoise) sNoise.value = String(physicsConfig.noise.base_strength * 100);
-  const vNoise = document.getElementById('val-noise');
-  if (vNoise) vNoise.textContent = physicsConfig.noise.base_strength.toFixed(2);
-}
-document.getElementById('btn-export').onclick = () => { document.getElementById('export-modal').classList.add('open'); };
-document.getElementById('export-close').onclick = () => { document.getElementById('export-modal').classList.remove('open'); };
-document.getElementById('export-json').onclick = () => { exportStateJSON(); document.getElementById('export-modal').classList.remove('open'); };
-document.getElementById('export-summary').onclick = () => { exportSummary(); document.getElementById('export-modal').classList.remove('open'); };
-document.getElementById('export-image').onclick = () => { exportImage(); document.getElementById('export-modal').classList.remove('open'); };
 
 // Mouse interaction - convert screen to world coordinates
 function screenToWorld(sx, sy) {
@@ -4060,7 +4072,8 @@ if (scrubber) {
   scrubber.oninput = (e) => {
     const idx = parseInt((e.target as HTMLInputElement).value);
     ReplaySystem.seek(idx);
-    document.getElementById('scrubber-label').textContent = `Frame ${idx}`;
+    const label = document.getElementById('scrubber-label');
+    if (label) label.textContent = `Frame ${idx}`;
   };
 }
 
