@@ -75,6 +75,24 @@ const MATERIAL_LAWS_V1: Record<
     oxygen: { label: 'Oxygen', conductivity: 0.5, viscosity: 0.55, brittleness: 0.3, noiseDamping: 0.25 }
 };
 
+const MATERIALS_VIZ_V1: Record<
+    string,
+    { category: 'metal' | 'mineral' | 'bio'; color: string; mass: number; C: number }
+> = {
+    gold: { category: 'metal', color: '#ffd700', C: 0.9, mass: 0.92 },
+    iron: { category: 'metal', color: '#8b8b8b', C: 0.6, mass: 0.85 },
+    copper: { category: 'metal', color: '#b87333', C: 0.96, mass: 0.76 },
+    titanium: { category: 'metal', color: '#878787', C: 0.5, mass: 0.88 },
+    silver: { category: 'metal', color: '#c0c0c0', C: 0.8, mass: 0.9 },
+    quartz: { category: 'mineral', color: '#e8e8e8', C: 0.7, mass: 0.77 },
+    tourmaline: { category: 'mineral', color: '#ff85c1', C: 0.7, mass: 0.68 },
+    fluorite: { category: 'mineral', color: '#b38adb', C: 0.65, mass: 0.7 },
+    carbon: { category: 'bio', color: '#5a5a5a', C: 0.95, mass: 0.89 },
+    mycelium: { category: 'bio', color: '#5cff9d', C: 0.98, mass: 0.77 },
+    nitrogen: { category: 'bio', color: '#4dd9e0', C: 0.8, mass: 0.72 },
+    oxygen: { category: 'bio', color: '#7ab3ff', C: 0.85, mass: 0.75 }
+};
+
 let lastExplainable: {
     patternCounts: Record<string, number>;
     activeCentroid: { x: number; y: number } | null;
@@ -879,12 +897,129 @@ function ensurePoCDemoControls() {
     group.className = 'mgs-toolbar-group';
     group.innerHTML = `
       <label>PoC</label>
+      <button id="btn-load-concept-forge" class="secondary" title="Load the Concept Forge PoC graph as a scene">Load Concept Forge PoC</button>
       <button id="btn-poc-demo" class="secondary" title="Run a 30s recruiter-repeatable MindGraphSim demo">Run 30s Demo</button>
     `;
     toolbar.appendChild(group);
 
+    const btnLoad = document.getElementById('btn-load-concept-forge');
+    btnLoad?.addEventListener('click', () => loadConceptForgePoC());
+
     const btn = document.getElementById('btn-poc-demo');
     btn?.addEventListener('click', () => runPoCDemo());
+}
+
+function loadConceptForgePoC() {
+    stopPoCDemo();
+    isRunning = false;
+
+    // Reset via a known scene to keep engine internals consistent, then replace state with our PoC graph.
+    loadScene('blank');
+
+    const nodes = [
+        // Core system nodes
+        { id: 'cf', label: 'Concept Forge', material: 'gold', nx: 0.18, ny: 0.35, role: 'Bridge' },
+        { id: 'mgs', label: 'MindGraphSim', material: 'mycelium', nx: 0.18, ny: 0.55, role: 'Anchor' },
+        { id: 'md', label: 'Methodology Decider', material: 'silver', nx: 0.38, ny: 0.40, role: 'Bridge' },
+        { id: 'rlaif', label: 'RLAIF Loop', material: 'iron', nx: 0.38, ny: 0.60, role: 'Sentinel' },
+        { id: 'llm', label: 'LLM (Gemma 3n)', material: 'titanium', nx: 0.38, ny: 0.25, role: 'Explorer' },
+
+        // Data structures
+        { id: 'fv', label: 'Feature Vector', material: 'quartz', nx: 0.55, ny: 0.38, role: 'Anchor' },
+        { id: 'sw', label: 'Scalar Weight', material: 'quartz', nx: 0.55, ny: 0.62, role: 'Anchor' },
+
+        // Material-as-cognition nodes
+        { id: 'gold', label: 'Gold: Anchor', material: 'gold', nx: 0.75, ny: 0.22, role: 'Anchor' },
+        { id: 'iron_m', label: 'Iron: Practical', material: 'iron', nx: 0.75, ny: 0.38, role: 'Anchor' },
+        { id: 'quartz', label: 'Quartz: Sources', material: 'quartz', nx: 0.75, ny: 0.54, role: 'Anchor' },
+        { id: 'carbon', label: 'Carbon: Versatile', material: 'carbon', nx: 0.75, ny: 0.70, role: 'Bridge' },
+        { id: 'copper', label: 'Copper: Notes', material: 'copper', nx: 0.75, ny: 0.86, role: 'Explorer' }
+    ];
+
+    const edges = [
+        { source: 'cf', target: 'mgs', weight: 0.9 },
+        { source: 'cf', target: 'llm', weight: 0.7 },
+        { source: 'llm', target: 'gold', weight: 0.5 },
+        { source: 'llm', target: 'iron_m', weight: 0.5 },
+        { source: 'llm', target: 'quartz', weight: 0.5 },
+        { source: 'llm', target: 'carbon', weight: 0.5 },
+        { source: 'llm', target: 'copper', weight: 0.5 },
+
+        { source: 'fv', target: 'md', weight: 0.8 },
+        { source: 'sw', target: 'rlaif', weight: 0.8 },
+        { source: 'md', target: 'mgs', weight: 0.55 },
+        { source: 'rlaif', target: 'mgs', weight: 0.55 },
+
+        // "Behavior" edges: recruiter-readable explanations
+        { source: 'gold', target: 'fv', weight: 0.65 },
+        { source: 'iron_m', target: 'fv', weight: 0.7 },
+        { source: 'quartz', target: 'fv', weight: 0.7 },
+        { source: 'carbon', target: 'sw', weight: 0.65 },
+        { source: 'copper', target: 'sw', weight: 0.55 }
+    ];
+
+    state.objects = nodes.map((n) => createLabObject(n.id, n.label, n.material, n.nx, n.ny, n.role));
+    state.edges = edges.map((e, idx) => createLabEdge(`cf_poc_e${idx}`, e.source, e.target, e.weight));
+    state.patterns = [];
+    state.step = 0;
+    state.overloads = 0;
+    state.recoveries = 0;
+    state.ambient = { noise: 0.2, safety: 0.7 };
+
+    appendEventLog('[PoC] Loaded Concept Forge graph', 'success');
+    appendEventLog('Try: click Run 30s Demo for a story run, or use Export → Run JSON.', 'info');
+    drawGraph();
+    updateDOMHUD();
+}
+
+function createLabObject(id: string, label: string, material: string, nx: number, ny: number, role: string) {
+    const mat = MATERIALS_VIZ_V1[material] || MATERIALS_VIZ_V1.iron;
+    const x = Math.max(40, Math.min(960, nx * 1000));
+    const y = Math.max(40, Math.min(720, ny * 760));
+
+    const roleMassMultiplier =
+        role === 'Anchor' ? 1.4 : role === 'Explorer' ? 0.7 : role === 'Bridge' ? 1.0 : role === 'Sentinel' ? 1.1 : 1.0;
+
+    return {
+        id,
+        label,
+        material,
+        mat,
+        role,
+
+        x,
+        y,
+        vx: 0,
+        vy: 0,
+        fx: 0,
+        fy: 0,
+
+        mass: mat.mass * roleMassMultiplier,
+        activation: 0.35 + Math.random() * 0.15,
+        sensory: 0.25 + Math.random() * 0.2,
+        energy: 0.55 + Math.random() * 0.2,
+        stress: 0.12 + Math.random() * 0.18,
+        overloaded: false,
+        overloadEnergy: 0,
+        activationHistory: [],
+        alertCooldown: 0,
+        pinned: false
+    };
+}
+
+function createLabEdge(id: string, sourceId: string, targetId: string, weight: number = 1) {
+    const baseLength = physicsConfig.layout?.targetSpacing || physicsConfig.spring.base_length;
+    return {
+        id,
+        sourceId,
+        targetId,
+        weight,
+        spring_k: physicsConfig.spring.stiffness * weight,
+        rest_length: baseLength * (0.8 + 0.4 / Math.max(0.1, weight)),
+        tension: 0,
+        severed: false,
+        recovery: 0
+    };
 }
 
 function runPoCDemo() {
