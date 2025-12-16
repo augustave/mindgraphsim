@@ -51,16 +51,15 @@ const EXPLAINABLE_METRICS_CONFIG = {
     stressThreshold: 0.6
 };
 
-const MATERIAL_LAWS_V1: Record<
-    string,
-    {
-        label: string;
-        conductivity: number;
-        viscosity: number;
-        brittleness: number;
-        noiseDamping: number;
-    }
-> = {
+type MaterialLawV1 = {
+    label: string;
+    conductivity: number;
+    viscosity: number;
+    brittleness: number;
+    noiseDamping: number;
+};
+
+const MATERIAL_LAWS_V1: Record<string, MaterialLawV1> = {
     gold: { label: 'Gold (Core)', conductivity: 0.75, viscosity: 0.55, brittleness: 0.25, noiseDamping: 0.15 },
     iron: { label: 'Iron (Position)', conductivity: 0.45, viscosity: 0.75, brittleness: 0.35, noiseDamping: 0.1 },
     copper: { label: 'Copper (Notes)', conductivity: 0.95, viscosity: 0.2, brittleness: 0.85, noiseDamping: 0.05 },
@@ -74,6 +73,30 @@ const MATERIAL_LAWS_V1: Record<
     nitrogen: { label: 'Nitrogen', conductivity: 0.5, viscosity: 0.6, brittleness: 0.35, noiseDamping: 0.3 },
     oxygen: { label: 'Oxygen', conductivity: 0.5, viscosity: 0.55, brittleness: 0.3, noiseDamping: 0.25 }
 };
+
+const MATERIAL_LAW_PRESETS_V1: Record<
+    string,
+    { id: string; label: string; description: string; overrides: Partial<Record<string, Partial<MaterialLawV1>>> }
+> = {
+    copper_fast_brittle: {
+        id: 'copper_fast_brittle',
+        label: 'Copper Fast / Brittle',
+        description: 'Faster propagation, higher overload risk (default PoC story).',
+        overrides: { copper: { conductivity: 0.98, brittleness: 0.9, viscosity: 0.18, noiseDamping: 0.03 } }
+    },
+    copper_stable: {
+        id: 'copper_stable',
+        label: 'Copper Stable',
+        description: 'Slower propagation, lower overload risk, more damping.',
+        overrides: { copper: { conductivity: 0.55, brittleness: 0.25, viscosity: 0.55, noiseDamping: 0.2 } }
+    }
+};
+
+let activeMaterialLawPresetId: keyof typeof MATERIAL_LAW_PRESETS_V1 = 'copper_fast_brittle';
+type MaterialLensMode = 'none' | 'conductivity' | 'viscosity' | 'brittleness' | 'noiseDamping';
+let materialLensMode: MaterialLensMode = 'none';
+
+let comparisonRunning = false;
 
 const MATERIALS_VIZ_V1: Record<
     string,
@@ -104,6 +127,87 @@ let pocDemo: { running: boolean; intervalId: number | null; remainingSteps: numb
     remainingSteps: 0
 };
 
+type InterventionMarker = { step: number; label: string; kind: ToastKind };
+const interventionMarkers: InterventionMarker[] = [];
+
+type ShareState = {
+    scene?: string;
+    profile?: string;
+    frame?: string;
+    model?: string;
+    materialPreset?: string;
+    lens?: MaterialLensMode;
+    seed?: number;
+    autostart?: 'demo' | 'compare' | 'none';
+    layout?: 'concept_forge';
+};
+
+let restoringFromURL = false;
+let shareSeed: number | null = null;
+let seededRandomRestore: (() => void) | null = null;
+
+function setParam(q: URLSearchParams, key: string, value: string | undefined) {
+    if (!value) q.delete(key);
+    else q.set(key, value);
+}
+
+function buildShareURL(extra: Partial<ShareState> = {}): string {
+    const ctx = getCurrentContext();
+    const url = new URL(window.location.href);
+    const q = url.searchParams;
+
+    const next: ShareState = {
+        scene: q.get('scene') || undefined,
+        profile: ctx.profileId,
+        frame: ctx.frameId,
+        model: (ctx as any).modelId || 'baseline',
+        materialPreset: activeMaterialLawPresetId,
+        lens: materialLensMode,
+        seed: typeof shareSeed === 'number' ? shareSeed : q.get('seed') ? Number(q.get('seed')) : undefined,
+        autostart: (q.get('autostart') as any) || 'none',
+        layout: (q.get('layout') as any) || undefined,
+        ...extra
+    };
+
+    setParam(q, 'scene', next.scene);
+    setParam(q, 'profile', next.profile);
+    setParam(q, 'frame', next.frame);
+    setParam(q, 'model', next.model);
+    setParam(q, 'materialPreset', next.materialPreset);
+    setParam(q, 'lens', next.lens && next.lens !== 'none' ? next.lens : undefined);
+    setParam(q, 'layout', next.layout);
+    setParam(q, 'autostart', next.autostart && next.autostart !== 'none' ? next.autostart : undefined);
+    if (typeof next.seed === 'number' && Number.isFinite(next.seed)) setParam(q, 'seed', String(next.seed));
+
+    url.search = q.toString();
+    return url.toString();
+}
+
+function writeShareStateToURL(extra: Partial<ShareState> = {}) {
+    if (restoringFromURL) return;
+    const url = buildShareURL(extra);
+    window.history.replaceState({}, '', url);
+}
+
+function startSeededRandom(seed: number) {
+    if (seededRandomRestore) seededRandomRestore();
+    shareSeed = seed;
+
+    const original = Math.random;
+    // @ts-ignore override for deterministic runs
+    Math.random = mulberry32(seed);
+    seededRandomRestore = () => {
+        // @ts-ignore restore
+        Math.random = original;
+        seededRandomRestore = null;
+    };
+}
+
+function stopSeededRandom() {
+    if (seededRandomRestore) seededRandomRestore();
+    seededRandomRestore = null;
+}
+
 // Initialize when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
     initLabUI();
@@ -132,6 +236,8 @@ function initLabUI() {
     ensureExportControls();
     ensureExplainabilityPanels();
     ensurePoCDemoControls();
+    ensureMaterialLensControls();
+    ensureShareControls();
 
     // 3. UI Bindings
     setupControls();
@@ -149,6 +255,9 @@ function initLabUI() {
 
     // 5. Start Loop
     play();
+
+    // 6. Restore from share link (optional)
+    tryRestoreFromURL();
 }
 
 function play() {
@@ -291,7 +400,9 @@ function setupDropdowns() {
     const sceneSelect = document.getElementById('scene-select') as HTMLSelectElement;
     if (sceneSelect) {
         sceneSelect.onchange = (e) => {
-            loadScene((e.target as HTMLSelectElement).value);
+            const sceneId = (e.target as HTMLSelectElement).value;
+            loadScene(sceneId);
+            writeShareStateToURL({ scene: sceneId, layout: undefined });
             drawGraph();
         };
     }
@@ -312,6 +423,7 @@ function setupDropdowns() {
 
             applyProfile(profileId);
             updateDOMHUD();
+            writeShareStateToURL({ profile: profileId });
         };
     }
 
@@ -329,6 +441,7 @@ function setupDropdowns() {
         modelSelect.onchange = (e) => {
             applyModel((e.target as HTMLSelectElement).value);
             updateDOMHUD();
+            writeShareStateToURL({ model: (e.target as HTMLSelectElement).value });
         };
     }
 
@@ -347,8 +460,10 @@ function setupDropdowns() {
 
         frameSelect.onchange = (e) => {
             console.log("Frame changed to:", (e.target as HTMLSelectElement).value);
-            applyFrame((e.target as HTMLSelectElement).value);
+            const frameId = (e.target as HTMLSelectElement).value;
+            applyFrame(frameId);
             updateDOMHUD();
+            writeShareStateToURL({ frame: frameId });
         };
         // Set default
         frameSelect.value = 'frame_open_exploration';
@@ -381,6 +496,8 @@ function updateDOMHUD() {
     setText('stat-frame', ctx.frameId);
 
     updateExplainabilityPanels();
+    updateInterventionTimelineUI();
+    updateMaterialLensUI();
 }
 
 function setText(id: string, val: string) {
@@ -448,6 +565,39 @@ function injectLabPolishStyles() {
       .mgs-export-group button:hover {
         background: #444;
       }
+      .mgs-marker-row {
+        position: relative;
+        height: 10px;
+        margin-top: 4px;
+        opacity: 0.85;
+      }
+      .mgs-marker {
+        position: absolute;
+        top: 0;
+        width: 2px;
+        height: 10px;
+        background: #e6ff1a;
+      }
+      .mgs-marker.info { background: #e6ff1a; }
+      .mgs-marker.warning { background: #ffaa00; }
+      .mgs-marker.error { background: #ff4d4d; }
+      .mgs-marker.success { background: #5cff9d; }
+      .mgs-timeline-actions {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .mgs-timeline-actions button {
+        background: #333;
+        color: #c4c4c4;
+        border: 1px solid #333;
+        padding: 4px 8px;
+        border-radius: 3px;
+        font-family: inherit;
+        font-size: 0.7rem;
+        cursor: pointer;
+      }
+      .mgs-timeline-actions button:hover { background: #444; }
     `;
     document.head.appendChild(style);
 }
@@ -631,6 +781,7 @@ function ensureExportControls() {
       <label>Export</label>
       <button id="btn-export-json" class="secondary" title="Download run JSON (records preferred)">Run JSON</button>
       <button id="btn-export-narrative" class="secondary" title="Download narrative summary (requires recording)">Narrative</button>
+      <button id="btn-export-bundle" class="secondary" title="Download JSON + narrative + a PNG snapshot">Bundle</button>
     `;
     toolbar.appendChild(group);
 
@@ -639,6 +790,9 @@ function ensureExportControls() {
 
     const btnNarr = document.getElementById('btn-export-narrative');
     btnNarr?.addEventListener('click', () => exportNarrative());
+
+    const btnBundle = document.getElementById('btn-export-bundle');
+    btnBundle?.addEventListener('click', () => exportBundle());
 }
 
 function exportRunJSON() {
@@ -687,6 +841,32 @@ function exportNarrative() {
     triggerDownload(text, 'text/plain', filename);
     showToast(`Exported ${filename}`, 'success');
     appendEventLog(`[EXPORT] Saved ${filename}`, 'info');
+}
+
+function exportBundle() {
+    exportRunJSON();
+    exportNarrative();
+    exportGraphPNG();
+    showToast('Export bundle triggered (JSON + narrative + PNG)', 'success', 2000);
+    appendEventLog('[EXPORT] Bundle triggered (JSON + narrative + PNG)', 'info');
+}
+
+function exportGraphPNG() {
+    const canvas = document.getElementById('graph-canvas') as HTMLCanvasElement | null;
+    if (!canvas) {
+        showToast('PNG export failed: canvas not found', 'error');
+        appendEventLog('[EXPORT] PNG failed (no canvas)', 'error');
+        return;
+    }
+    const dataUrl = canvas.toDataURL('image/png');
+    const a = document.createElement('a');
+    a.href = dataUrl;
+    a.download = 'mindgraphsim_graph.png';
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    appendEventLog('[EXPORT] Saved mindgraphsim_graph.png', 'info');
 }
 
 function triggerDownload(contents: string, mimeType: string, filename: string) {
@@ -796,6 +976,24 @@ function ensureExplainabilityPanels() {
     side.appendChild(container);
 }
 
+function ensureInterventionTimelinePanel() {
+    const side = document.querySelector('.mgs-side');
+    if (!side) return;
+    if (document.getElementById('mgs-demo-timeline')) return;
+
+    const card = document.createElement('div');
+    card.id = 'mgs-demo-timeline';
+    card.className = 'mgs-card';
+    card.innerHTML = `
+      <h3>Demo Timeline</h3>
+      <div id="mgs-demo-timeline-body" style="display:flex; flex-direction:column; gap:6px;"></div>
+      <div style="font-size:0.6rem; color:#666; margin-top:6px;">
+        Markers appear on the scrubber while recording/replay.
+      </div>
+    `;
+    side.appendChild(card);
+}
+
 function updateExplainabilityPanels() {
     const metrics = computeExplainableMetrics();
     setText('metric-cognitive-load', metrics.cognitiveLoad.toFixed(2));
@@ -855,6 +1053,14 @@ function computeExplainableMetrics(): ExplainableMetrics {
     return { cognitiveLoad, coherence, novelty };
 }
 
+function getActiveMaterialLaw(material: string): MaterialLawV1 | null {
+    const base = MATERIAL_LAWS_V1[material];
+    if (!base) return null;
+    const preset = MATERIAL_LAW_PRESETS_V1[activeMaterialLawPresetId];
+    const override = preset?.overrides?.[material] || {};
+    return { ...base, ...override };
+}
+
 function renderMaterialEvidenceHTML(): string {
     const present = new Map<string, { count: number; examples: string[] }>();
     state.objects.forEach((o: any) => {
@@ -867,7 +1073,7 @@ function renderMaterialEvidenceHTML(): string {
 
     const keys = Array.from(present.keys()).sort((a, b) => a.localeCompare(b));
     const lines = keys.map((mat) => {
-        const law = MATERIAL_LAWS_V1[mat];
+        const law = getActiveMaterialLaw(mat);
         const meta = present.get(mat)!;
         const title = law ? law.label : mat;
         const props = law
@@ -888,6 +1094,105 @@ function renderMaterialEvidenceHTML(): string {
     return lines.join('');
 }
 
+function ensureMaterialLensControls() {
+    const toolbar = document.querySelector('.mgs-toolbar');
+    if (!toolbar) return;
+    if (document.getElementById('lens-material')) return;
+
+    const group = document.createElement('div');
+    group.className = 'mgs-toolbar-group';
+    group.innerHTML = `
+      <label>Material Lens</label>
+      <select id="lens-material" title="Show material-law properties as a lens (UI-only)">
+        <option value="none" selected>None</option>
+        <option value="conductivity">Conductivity</option>
+        <option value="viscosity">Viscosity</option>
+        <option value="brittleness">Brittleness</option>
+        <option value="noiseDamping">Noise Damping</option>
+      </select>
+      <select id="material-law-preset" title="Select a material-law preset (UI-only)">
+        ${Object.values(MATERIAL_LAW_PRESETS_V1)
+            .map((p) => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.label)}</option>`)
+            .join('')}
+      </select>
+    `;
+    toolbar.appendChild(group);
+
+    const lensSelect = document.getElementById('lens-material') as HTMLSelectElement | null;
+    if (lensSelect) {
+        lensSelect.value = materialLensMode;
+        lensSelect.onchange = () => {
+            materialLensMode = lensSelect.value as MaterialLensMode;
+            updateMaterialLensUI();
+            writeShareStateToURL({ lens: materialLensMode });
+        };
+    }
+
+    const presetSelect = document.getElementById('material-law-preset') as HTMLSelectElement | null;
+    if (presetSelect) {
+        presetSelect.value = activeMaterialLawPresetId;
+        presetSelect.onchange = () => {
+            activeMaterialLawPresetId = presetSelect.value as any;
+            updateExplainabilityPanels();
+            updateMaterialLensUI();
+            writeShareStateToURL({ materialPreset: activeMaterialLawPresetId });
+        };
+    }
+}
+
+function updateMaterialLensUI() {
+    const existing = document.getElementById('mgs-card-material-lens');
+    if (materialLensMode === 'none') {
+        existing?.remove();
+        return;
+    }
+
+    const side = document.querySelector('.mgs-side');
+    if (!side) return;
+
+    let card = document.getElementById('mgs-card-material-lens');
+    if (!card) {
+        card = document.createElement('div');
+        card.id = 'mgs-card-material-lens';
+        card.className = 'mgs-card';
+        side.insertBefore(card, side.firstChild);
+    }
+
+    const key: keyof MaterialLawV1 = materialLensMode;
+    const rows = state.objects
+        .map((o: any) => {
+            const law = getActiveMaterialLaw(String(o.material || 'unknown'));
+            const val = law ? (law[key] ?? 0) : 0;
+            return { id: o.id, label: o.label, material: o.material, value: val };
+        })
+        .sort((a, b) => b.value - a.value)
+        .slice(0, 10);
+
+    const preset = MATERIAL_LAW_PRESETS_V1[activeMaterialLawPresetId];
+    card.innerHTML = `
+      <h3>Material Lens <span class="count">${escapeHtml(materialLensMode)}</span></h3>
+      <div style="display:flex; flex-direction:column; gap:6px;">
+        ${rows
+            .map((r) => {
+                const v = Number(r.value).toFixed(2);
+                return `
+            <div style="display:flex; justify-content:space-between; gap:10px; padding:6px 8px; border:1px solid #1a1a1e; background:#0f0f12; border-radius:4px;">
+              <div style="min-width:0;">
+                <div style="color:#c4c4c4; font-size:0.65rem; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(String(r.label))}</div>
+                <div style="color:#666; font-size:0.6rem;">${escapeHtml(String(r.material))}</div>
+              </div>
+              <div style="color:#e6ff1a; font-family:inherit; font-size:0.7rem; font-weight:700;">${v}</div>
+            </div>
+          `;
+            })
+            .join('')}
+        <div style="font-size:0.6rem; color:#666; line-height:1.35;">
+          Preset: <strong style="color:#e6ff1a;">${escapeHtml(preset.label)}</strong> — ${escapeHtml(preset.description)}
+        </div>
+      </div>
+    `;
+}
+
 function ensurePoCDemoControls() {
     const toolbar = document.querySelector('.mgs-toolbar');
     if (!toolbar) return;
@@ -898,6 +1203,7 @@ function ensurePoCDemoControls() {
     group.innerHTML = `
       <label>PoC</label>
       <button id="btn-load-concept-forge" class="secondary" title="Load the Concept Forge PoC graph as a scene">Load Concept Forge PoC</button>
+      <button id="btn-compare-material-presets" class="secondary" title="Run two short sims and compare outcomes (UI-only)">Compare Presets</button>
       <button id="btn-poc-demo" class="secondary" title="Run a 30s recruiter-repeatable MindGraphSim demo">Run 30s Demo</button>
     `;
     toolbar.appendChild(group);
@@ -905,8 +1211,50 @@ function ensurePoCDemoControls() {
     const btnLoad = document.getElementById('btn-load-concept-forge');
     btnLoad?.addEventListener('click', () => loadConceptForgePoC());
 
+    const btnCompare = document.getElementById('btn-compare-material-presets');
+    btnCompare?.addEventListener('click', () => runMaterialPresetComparison());
+
     const btn = document.getElementById('btn-poc-demo');
     btn?.addEventListener('click', () => runPoCDemo());
+}
+
+function ensureShareControls() {
+    const toolbar = document.querySelector('.mgs-toolbar');
+    if (!toolbar) return;
+    if (document.getElementById('btn-copy-link')) return;
+
+    const group = document.createElement('div');
+    group.className = 'mgs-toolbar-group';
+    group.innerHTML = `
+      <label>Share</label>
+      <button id="btn-copy-link" class="secondary" title="Copy a shareable link to this exact lab state">Copy Link</button>
+    `;
+    toolbar.appendChild(group);
+
+    const btn = document.getElementById('btn-copy-link');
+    btn?.addEventListener('click', async () => {
+        const url = buildShareURL();
+        try {
+            if (navigator.clipboard?.writeText) {
+                await navigator.clipboard.writeText(url);
+            } else {
+                const ta = document.createElement('textarea');
+                ta.value = url;
+                ta.style.position = 'fixed';
+                ta.style.left = '-9999px';
+                document.body.appendChild(ta);
+                ta.select();
+                document.execCommand('copy');
+                document.body.removeChild(ta);
+            }
+            showToast('Copied share link', 'success', 1400);
+            appendEventLog(`[SHARE] Copied link`, 'info');
+        } catch (err) {
+            console.error(err);
+            showToast('Copy failed (see console)', 'error', 1600);
+            appendEventLog('[SHARE] Copy failed', 'error');
+        }
+    });
 }
 
 function loadConceptForgePoC() {
@@ -968,6 +1316,7 @@ function loadConceptForgePoC() {
 
     appendEventLog('[PoC] Loaded Concept Forge graph', 'success');
     appendEventLog('Try: click Run 30s Demo for a story run, or use Export → Run JSON.', 'info');
+    writeShareStateToURL({ layout: 'concept_forge', scene: undefined });
     drawGraph();
     updateDOMHUD();
 }
@@ -1022,7 +1371,322 @@ function createLabEdge(id: string, sourceId: string, targetId: string, weight: n
     };
 }
 
-function runPoCDemo() {
+type PresetComparisonResult = {
+    presetId: string;
+    presetLabel: string;
+    steps: number;
+    overloads: number;
+    maxNoise: number;
+    cognitiveLoadFinal: number;
+    coherenceFinal: number;
+    novelty: number;
+    timeToSynthesisStep: number | null;
+    firstCopperOverloadStep: number | null;
+};
+
+function runMaterialPresetComparison(seedOverride?: number) {
+    if (comparisonRunning) return;
+
+    stopPoCDemo();
+    isRunning = false;
+    comparisonRunning = true;
+
+    const priorPreset = activeMaterialLawPresetId;
+    const snapshot = snapshotLabState();
+
+    showToast('Comparing material-law presets…', 'info', 1800);
+    appendEventLog('[COMPARE] Running two short sims…', 'info');
+    const seed = typeof seedOverride === 'number' && Number.isFinite(seedOverride)
+        ? seedOverride
+        : (shareSeed ?? ((Date.now() >>> 0) || 1));
+    shareSeed = seed;
+    writeShareStateToURL({ scene: 'research_session', layout: undefined, autostart: 'compare', seed });
+
+    // Let the toast/log paint before we run the sims.
+    window.setTimeout(() => {
+        try {
+            const results = withSeededRandom(seed, () => {
+                const a = simulatePresetRun('copper_fast_brittle', 220);
+                const b = simulatePresetRun('copper_stable', 220);
+                return { a, b };
+            });
+
+            renderComparisonCard(results.a, results.b, seed);
+            showToast('Comparison complete (see sidebar).', 'success', 2000);
+            appendEventLog('[COMPARE] Complete', 'success');
+        } catch (err) {
+            console.error(err);
+            showToast('Comparison failed (see console).', 'error', 2200);
+            appendEventLog('[COMPARE] Failed', 'error');
+        } finally {
+            activeMaterialLawPresetId = priorPreset;
+            restoreLabState(snapshot);
+            comparisonRunning = false;
+            drawGraph();
+            updateDOMHUD();
+        }
+    }, 20);
+}
+
+function mulberry32(seed: number) {
+    let t = seed >>> 0;
+    return () => {
+        t += 0x6d2b79f5;
+        let r = Math.imul(t ^ (t >>> 15), 1 | t);
+        r ^= r + Math.imul(r ^ (r >>> 7), 61 | r);
+        return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
+    };
+}
+
+function withSeededRandom<T>(seed: number, fn: () => T): T {
+    const original = Math.random;
+    // @ts-ignore override for deterministic comparison runs (UI-only)
+    Math.random = mulberry32(seed);
+    try {
+        return fn();
+    } finally {
+        // @ts-ignore restore
+        Math.random = original;
+    }
+}
+
+function snapshotLabState() {
+    const payload = {
+        state: {
+            objects: state.objects,
+            edges: state.edges,
+            patterns: state.patterns,
+            step: state.step,
+            overloads: state.overloads,
+            recoveries: state.recoveries,
+            ambient: state.ambient,
+            metrics: state.metrics,
+            displayPatterns: (state as any).displayPatterns
+        },
+        preset: activeMaterialLawPresetId
+    };
+
+    // structuredClone is widely supported in modern browsers; fallback keeps it safe for older environments.
+    // @ts-ignore
+    if (typeof structuredClone === 'function') return structuredClone(payload);
+    return JSON.parse(JSON.stringify(payload));
+}
+
+function restoreLabState(snapshot: any) {
+    const s = snapshot?.state;
+    if (!s) return;
+    state.objects = s.objects || [];
+    state.edges = s.edges || [];
+    state.patterns = s.patterns || [];
+    state.step = s.step || 0;
+    state.overloads = s.overloads || 0;
+    state.recoveries = s.recoveries || 0;
+    state.ambient = s.ambient || { noise: 0.2, safety: 0.7 };
+    state.metrics = s.metrics || {};
+    (state as any).displayPatterns = s.displayPatterns || [];
+    activeMaterialLawPresetId = snapshot.preset || activeMaterialLawPresetId;
+}
+
+function tryRestoreFromURL() {
+    const q = new URLSearchParams(window.location.search);
+    if ([...q.keys()].length === 0) return;
+
+    restoringFromURL = true;
+    try {
+        const scene = q.get('scene');
+        const profileId = q.get('profile');
+        const frameId = q.get('frame');
+        const modelId = q.get('model');
+        const presetId = q.get('materialPreset');
+        const lens = q.get('lens') as MaterialLensMode | null;
+        const autostart = q.get('autostart') as ShareState['autostart'] | null;
+        const layout = q.get('layout') as ShareState['layout'] | null;
+        const seed = q.get('seed') ? Number(q.get('seed')) : null;
+
+        if (presetId && (MATERIAL_LAW_PRESETS_V1 as any)[presetId]) {
+            activeMaterialLawPresetId = presetId as any;
+        }
+        if (lens && ['none', 'conductivity', 'viscosity', 'brittleness', 'noiseDamping'].includes(lens)) {
+            materialLensMode = lens;
+        }
+        if (typeof seed === 'number' && Number.isFinite(seed)) shareSeed = seed;
+
+        const presetSelect = document.getElementById('material-law-preset') as HTMLSelectElement | null;
+        if (presetSelect) presetSelect.value = activeMaterialLawPresetId;
+        const lensSelect = document.getElementById('lens-material') as HTMLSelectElement | null;
+        if (lensSelect) lensSelect.value = materialLensMode;
+
+        if (layout === 'concept_forge') {
+            loadConceptForgePoC();
+        } else if (scene) {
+            loadScene(scene);
+        }
+
+        if (profileId) applyProfile(profileId);
+        if (frameId) applyFrame(frameId);
+        if (modelId) applyModel(modelId);
+
+        drawGraph();
+        updateDOMHUD();
+
+        // Autostart actions (optional)
+        if (autostart === 'compare') {
+            runMaterialPresetComparison(shareSeed ?? undefined);
+        } else if (autostart === 'demo') {
+            runPoCDemo(shareSeed ?? undefined);
+        }
+    } catch (err) {
+        console.error(err);
+        appendEventLog('[SHARE] Restore failed', 'error');
+    } finally {
+        restoringFromURL = false;
+        // Normalize URL to reflect current restored state
+        writeShareStateToURL({});
+    }
+}
+
+function simulatePresetRun(presetId: keyof typeof MATERIAL_LAW_PRESETS_V1, steps: number): PresetComparisonResult {
+    activeMaterialLawPresetId = presetId;
+
+    loadScene('research_session');
+    applyProfile('open_neutral');
+    applyFrame('frame_open_exploration');
+
+    // Ensure a clean baseline.
+    state.step = 0;
+    state.overloads = 0;
+    state.recoveries = 0;
+    state.ambient.noise = 0.2;
+
+    // Shared interventions to keep the comparison fair.
+    InputAdapter.applyEvent({ target: 'node', selector: 'question', channel: 'activation', mode: 'add', magnitude: 0.35 });
+
+    const uniquePatternTypes = new Set<string>();
+    let maxNoise = 0;
+    let timeToSynthesisStep: number | null = null;
+    let firstCopperOverloadStep: number | null = null;
+    let centroidMoveSum = 0;
+    let lastCentroid: { x: number; y: number } | null = null;
+
+    for (let i = 0; i < steps; i++) {
+        if (i === 60) InputAdapter.applyEvent({ target: 'node', selector: 'note2', channel: 'activation', mode: 'add', magnitude: 0.28 });
+        if (i === 120) InputAdapter.applyEvent({ target: 'node', selector: 'synthesis', channel: 'activation', mode: 'add', magnitude: 0.22 });
+
+        stepSimulation(1);
+
+        maxNoise = Math.max(maxNoise, state.ambient.noise ?? 0);
+
+        for (const p of state.patterns || []) uniquePatternTypes.add(String((p as any).type || 'unknown'));
+
+        const synthesis = state.objects.find((o: any) => o.id === 'synthesis');
+        if (timeToSynthesisStep === null && synthesis && (synthesis.activation ?? 0) >= 0.65) {
+            timeToSynthesisStep = state.step;
+        }
+
+        const copperOver = state.objects.some((o: any) => String(o.material) === 'copper' && Boolean(o.overloaded));
+        if (firstCopperOverloadStep === null && copperOver) firstCopperOverloadStep = state.step;
+
+        // Motion component for novelty: active centroid movement over time.
+        const centroid = computeActiveCentroid(EXPLAINABLE_METRICS_CONFIG.activeActivationThreshold);
+        if (centroid && lastCentroid) centroidMoveSum += Math.hypot(centroid.x - lastCentroid.x, centroid.y - lastCentroid.y);
+        lastCentroid = centroid;
+    }
+
+    const preset = MATERIAL_LAW_PRESETS_V1[presetId];
+    const cognitiveLoadFinal = computeCognitiveLoadNow();
+    const coherenceFinal = computeCoherenceNow(EXPLAINABLE_METRICS_CONFIG.activeActivationThreshold);
+    const novelty = Math.max(0, Math.min(1, uniquePatternTypes.size / 4 + Math.min(1, centroidMoveSum / 1200)));
+
+    return {
+        presetId,
+        presetLabel: preset.label,
+        steps,
+        overloads: state.overloads ?? 0,
+        maxNoise,
+        cognitiveLoadFinal,
+        coherenceFinal,
+        novelty,
+        timeToSynthesisStep,
+        firstCopperOverloadStep
+    };
+}
+
+function computeCognitiveLoadNow() {
+    return state.objects.reduce((sum: number, o: any) => {
+        const over = Math.max(0, (o.stress ?? 0) - EXPLAINABLE_METRICS_CONFIG.stressThreshold);
+        return sum + over;
+    }, 0);
+}
+
+function computeCoherenceNow(activeThreshold: number) {
+    const active = new Set(
+        state.objects.filter((o: any) => (o.activation ?? 0) >= activeThreshold).map((o: any) => o.id)
+    );
+    const activeEdges = state.edges.filter((e: any) => !e.severed && active.has(e.sourceId) && active.has(e.targetId));
+    if (activeEdges.length === 0) return 0;
+    return activeEdges.reduce((sum: number, e: any) => sum + (e.weight ?? 0), 0) / activeEdges.length;
+}
+
+function computeActiveCentroid(activeThreshold: number): { x: number; y: number } | null {
+    const activeNodes = state.objects.filter((o: any) => (o.activation ?? 0) >= activeThreshold);
+    if (activeNodes.length === 0) return null;
+    return {
+        x: activeNodes.reduce((s: number, o: any) => s + (o.x ?? 0), 0) / activeNodes.length,
+        y: activeNodes.reduce((s: number, o: any) => s + (o.y ?? 0), 0) / activeNodes.length
+    };
+}
+
+function renderComparisonCard(a: PresetComparisonResult, b: PresetComparisonResult, seed: number) {
+    const side = document.querySelector('.mgs-side');
+    if (!side) return;
+
+    let card = document.getElementById('mgs-card-comparison');
+    if (!card) {
+        card = document.createElement('div');
+        card.id = 'mgs-card-comparison';
+        card.className = 'mgs-card';
+        side.insertBefore(card, side.firstChild);
+    }
+
+    const fmt = (n: number) => (Number.isFinite(n) ? n.toFixed(2) : '0.00');
+    const stepOrDash = (n: number | null) => (typeof n === 'number' ? String(n) : '—');
+
+    card.innerHTML = `
+      <h3>Preset Compare <span class="count">seed ${seed}</span></h3>
+      <div style="display:flex; flex-direction:column; gap:8px;">
+        <div style="color:#888; font-size:0.65rem; line-height:1.35;">
+          Same scene + interventions, different material-law presets (UI-only).
+        </div>
+        ${renderComparisonRow(a)}
+        ${renderComparisonRow(b)}
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px; font-size:0.65rem; color:#888;">
+          <div><span style="color:#666;">Δ coherence</span> <span style="color:#e6ff1a;">${fmt(b.coherenceFinal - a.coherenceFinal)}</span></div>
+          <div><span style="color:#666;">Δ overloads</span> <span style="color:#e6ff1a;">${fmt(b.overloads - a.overloads)}</span></div>
+        </div>
+      </div>
+    `;
+
+    function renderComparisonRow(r: PresetComparisonResult) {
+        return `
+          <div style="border:1px solid #1a1a1e; background:#0f0f12; border-radius:4px; padding:8px;">
+            <div style="display:flex; justify-content:space-between; gap:8px; align-items:center;">
+              <div style="color:#c4c4c4; font-weight:700;">${escapeHtml(r.presetLabel)}</div>
+              <div style="color:#666; font-size:0.6rem;">${r.steps} steps</div>
+            </div>
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:6px; margin-top:6px; font-size:0.65rem;">
+              <div><span style="color:#666;">coherence</span> <span style="color:#e6ff1a;">${fmt(r.coherenceFinal)}</span></div>
+              <div><span style="color:#666;">load</span> <span style="color:#e6ff1a;">${fmt(r.cognitiveLoadFinal)}</span></div>
+              <div><span style="color:#666;">novelty</span> <span style="color:#e6ff1a;">${fmt(r.novelty)}</span></div>
+              <div><span style="color:#666;">max noise</span> <span style="color:#e6ff1a;">${fmt(r.maxNoise)}</span></div>
+              <div><span style="color:#666;">synthesis ≥0.65</span> <span style="color:#e6ff1a;">${escapeHtml(stepOrDash(r.timeToSynthesisStep))}</span></div>
+              <div><span style="color:#666;">copper overload</span> <span style="color:#e6ff1a;">${escapeHtml(stepOrDash(r.firstCopperOverloadStep))}</span></div>
+            </div>
+          </div>
+        `;
+    }
+}
+
+function runPoCDemo(seedOverride?: number) {
     if (pocDemo.running) return;
     stopPoCDemo();
 
@@ -1030,12 +1694,17 @@ function runPoCDemo() {
     pocDemo.remainingSteps = 450; // ~30s at 15 steps/sec tick below
 
     isRunning = false;
+    const seed = typeof seedOverride === 'number' && Number.isFinite(seedOverride)
+        ? seedOverride
+        : (shareSeed ?? ((Date.now() >>> 0) || 1));
+    startSeededRandom(seed);
     showToast('PoC demo: Research → Notes → Synthesis', 'info', 2200);
     appendEventLog('[DEMO] Loading Research Mesh…', 'info');
 
     loadScene('research_session');
     applyProfile('open_neutral');
     applyFrame('frame_open_exploration');
+    writeShareStateToURL({ scene: 'research_session', layout: undefined, autostart: 'demo', seed });
     drawGraph();
     updateDOMHUD();
 
@@ -1043,10 +1712,12 @@ function runPoCDemo() {
     if (recorder?.start) recorder.start();
     updateRecorderHint();
     appendEventLog(`[DEMO] Recording last ${getRecorderCapacity()} frames`, 'info');
+    ensureInterventionTimelinePanel();
+    clearInterventionMarkers();
 
     // Step 1: intervention - nudge Question
     InputAdapter.applyEvent({ target: 'node', selector: 'question', channel: 'activation', mode: 'add', magnitude: 0.35 });
-    appendEventLog('Intervention: user nudged activation of Question → ripple begins', 'info');
+    appendIntervention('Intervention: user nudged activation of Question → ripple begins', 'info');
 
     let tick = 0;
     pocDemo.intervalId = window.setInterval(() => {
@@ -1065,14 +1736,14 @@ function runPoCDemo() {
         tick += 1;
         if (tick === 70) {
             InputAdapter.applyEvent({ target: 'node', selector: 'note2', channel: 'activation', mode: 'add', magnitude: 0.28 });
-            appendEventLog('Copper notes conduct faster → overload risk climbs', 'warning');
+            appendIntervention('Copper notes conduct faster → overload risk climbs', 'warning');
         }
         if (tick === 140) {
             InputAdapter.applyEvent({ target: 'node', selector: 'synthesis', channel: 'activation', mode: 'add', magnitude: 0.22 });
-            appendEventLog('Intervention: boosted Synthesis → field coherence increases', 'info');
+            appendIntervention('Intervention: boosted Synthesis → field coherence increases', 'info');
         }
         if (tick === 240) {
-            appendEventLog('Mineral sources stay stable anchors under load', 'info');
+            appendIntervention('Mineral sources stay stable anchors under load', 'info');
         }
 
         // Draw + HUD
@@ -1086,15 +1757,25 @@ function stopPoCDemo() {
     if (pocDemo.intervalId) window.clearInterval(pocDemo.intervalId);
     pocDemo.intervalId = null;
     pocDemo.running = false;
+    stopSeededRandom();
+}
+
+function clearInterventionMarkers() {
+    interventionMarkers.splice(0, interventionMarkers.length);
+}
+
+function appendIntervention(message: string, kind: ToastKind) {
+    interventionMarkers.push({ step: state.step, label: message, kind });
+    appendEventLog(message, kind);
 }
 
 function applyMaterialLawLayer() {
-    if (!pocDemo.running) return;
+    if (!pocDemo.running && !comparisonRunning) return;
 
     // Demo-only material "laws" layer: adds explainable, visible behavior without changing engine integration/forces/pattern logic.
     const activationDeltas: Record<string, number> = {};
 
-    const getLaw = (o: any) => MATERIAL_LAWS_V1[String(o.material || 'unknown')];
+    const getLaw = (o: any) => getActiveMaterialLaw(String(o.material || 'unknown'));
     const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
 
     for (const e of state.edges) {
@@ -1142,4 +1823,123 @@ function applyMaterialLawLayer() {
         if (!o) return;
         o.activation = clamp01((o.activation ?? 0) + delta);
     });
+}
+
+function updateInterventionTimelineUI() {
+    ensureInterventionTimelinePanel();
+
+    const scrubber = document.getElementById('scrubber') as HTMLInputElement | null;
+    const modeBadge = document.getElementById('mode-badge');
+    const timeline = document.getElementById('mgs-demo-timeline-body');
+    if (!timeline) return;
+
+    if (interventionMarkers.length === 0) {
+        timeline.innerHTML = `<div style="color:#888; font-size:0.65rem;">Run the PoC demo to generate a repeatable intervention trace.</div>`;
+    } else {
+        timeline.innerHTML = interventionMarkers
+            .slice(-8)
+            .map((m) => {
+                const badge =
+                    m.kind === 'success'
+                        ? '✓'
+                        : m.kind === 'warning'
+                            ? '!'
+                            : m.kind === 'error'
+                                ? '×'
+                                : '•';
+                return `
+          <button data-step="${m.step}" class="secondary" style="text-align:left; width:100%; border:1px solid #2a2a2a; background:#0f0f12; padding:6px 8px; border-radius:4px; cursor:pointer;">
+            <div style="display:flex; justify-content:space-between; gap:8px; align-items:center;">
+              <span style="color:#c4c4c4; font-size:0.65rem;"><span style="color:#e6ff1a; font-weight:700;">${badge}</span> Step ${m.step}</span>
+              <span style="color:#666; font-size:0.6rem;">jump</span>
+            </div>
+            <div style="color:#888; font-size:0.65rem; margin-top:3px;">${escapeHtml(m.label)}</div>
+          </button>
+        `;
+            })
+            .join('');
+
+        timeline.querySelectorAll('button[data-step]').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                const step = Number((btn as HTMLElement).getAttribute('data-step') || 0);
+                jumpReplayToStep(step);
+            });
+        });
+    }
+
+    // Scrubber markers
+    if (scrubber) {
+        let markerRow = document.getElementById('mgs-scrubber-markers');
+        if (!markerRow) {
+            markerRow = document.createElement('div');
+            markerRow.id = 'mgs-scrubber-markers';
+            markerRow.className = 'mgs-marker-row';
+            scrubber.parentElement?.appendChild(markerRow);
+        }
+        markerRow.innerHTML = renderScrubberMarkersHTML();
+    }
+
+    // "Return to live" affordance when in replay
+    const timelineEl = document.querySelector('.mgs-timeline');
+    if (timelineEl && !document.getElementById('btn-return-live')) {
+        const actions = document.createElement('div');
+        actions.className = 'mgs-timeline-actions';
+        actions.innerHTML = `<button id="btn-return-live" title="Exit replay and resume live simulation" style="display:none;">Return to Live</button>`;
+        modeBadge?.insertAdjacentElement('afterend', actions);
+        const btn = document.getElementById('btn-return-live');
+        btn?.addEventListener('click', () => {
+            const replay = (window as any).ReplaySystem;
+            if (replay?.exit) replay.exit();
+            isRunning = true;
+            const playBtn = document.getElementById('btn-play');
+            playBtn?.classList.toggle('active', isRunning);
+            play();
+        });
+    }
+
+    const returnBtn = document.getElementById('btn-return-live') as HTMLButtonElement | null;
+    const isReplay = Boolean(modeBadge?.classList.contains('replay'));
+    if (returnBtn) returnBtn.style.display = isReplay ? 'inline-flex' : 'none';
+}
+
+function renderScrubberMarkersHTML(): string {
+    const recorder = (window as any).Recorder;
+    const frames = recorder?.buffer as Array<any> | undefined;
+    if (!frames || frames.length < 2 || interventionMarkers.length === 0) return '';
+
+    const maxIndex = frames.length - 1;
+    const markers = interventionMarkers
+        .slice(-8)
+        .map((m) => {
+            let idx = 0;
+            for (let i = 0; i < frames.length; i++) {
+                if ((frames[i]?.step ?? 0) >= m.step) { idx = i; break; }
+                idx = i;
+            }
+            const pct = (idx / maxIndex) * 100;
+            return `<span class="mgs-marker ${m.kind}" style="left:${pct.toFixed(2)}%;" title="${escapeHtml(m.label)}"></span>`;
+        })
+        .join('');
+
+    return markers;
+}
+
+function jumpReplayToStep(step: number) {
+    const recorder = (window as any).Recorder;
+    const replay = (window as any).ReplaySystem;
+    const scrubber = document.getElementById('scrubber') as HTMLInputElement | null;
+    const frames = recorder?.buffer as Array<any> | undefined;
+    if (!frames || frames.length === 0 || !scrubber) return;
+
+    let idx = 0;
+    for (let i = 0; i < frames.length; i++) {
+        if ((frames[i]?.step ?? 0) >= step) { idx = i; break; }
+        idx = i;
+    }
+
+    // Use engine replay if present; otherwise scrubber event.
+    if (replay?.seek) replay.seek(idx);
+    scrubber.value = String(idx);
+    scrubber.dispatchEvent(new Event('input', { bubbles: true }));
+    showToast(`Jumped to step ${step} (frame ${idx})`, 'info', 1200);
 }
