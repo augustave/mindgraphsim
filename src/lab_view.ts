@@ -145,6 +145,7 @@ type ShareState = {
 let restoringFromURL = false;
 let shareSeed: number | null = null;
 let seededRandomRestore: (() => void) | null = null;
+let lastBottleneck: { id: string | null; step: number } = { id: null, step: -9999 };
 
 function setParam(q: URLSearchParams, key: string, value: string | undefined) {
     if (!value) q.delete(key);
@@ -495,9 +496,10 @@ function updateDOMHUD() {
     setText('stat-profile', ctx.profileId);
     setText('stat-frame', ctx.frameId);
 
-    updateExplainabilityPanels();
-    updateInterventionTimelineUI();
-    updateMaterialLensUI();
+	updateExplainabilityPanels();
+	updateInterventionTimelineUI();
+	updateMaterialLensUI();
+	updateBottleneckUI();
 }
 
 function setText(id: string, val: string) {
@@ -906,7 +908,8 @@ function serializeLiveStateForExport() {
     const patterns = state.patterns.map((p: any) => ({
         id: p.id,
         type: p.type,
-        nodeIds: (p.nodes || []).map((n: any) => n?.id).filter(Boolean)
+        name: p.name,
+        nodeIds: (p.nodeIds || p.object_ids || (p.nodes || []).map((n: any) => n?.id).filter(Boolean)) || []
     }));
 
     return {
@@ -974,6 +977,181 @@ function ensureExplainabilityPanels() {
       </div>
     `;
     side.appendChild(container);
+}
+
+function ensureBottleneckPanel() {
+    const side = document.querySelector('.mgs-side');
+    if (!side) return;
+    if (document.getElementById('mgs-card-bottleneck')) return;
+
+    const card = document.createElement('div');
+    card.id = 'mgs-card-bottleneck';
+    card.className = 'mgs-card';
+    card.innerHTML = `
+      <h3>Bottleneck</h3>
+      <div id="bottleneck-body" style="display:flex; flex-direction:column; gap:8px;"></div>
+    `;
+    side.insertBefore(card, side.firstChild);
+}
+
+function updateBottleneckUI() {
+    ensureBottleneckPanel();
+    const body = document.getElementById('bottleneck-body');
+    if (!body) return;
+
+    const bottleneck = computeBottleneck();
+    if (!bottleneck) {
+        body.innerHTML = `<div style="color:#888; font-size:0.65rem;">No nodes available.</div>`;
+        return;
+    }
+
+    const { node, stress, activation, sensory } = bottleneck;
+    const isScreaming = stress >= 0.95;
+
+    if (isScreaming && (lastBottleneck.id !== node.id || state.step - lastBottleneck.step > 120)) {
+        lastBottleneck = { id: node.id, step: state.step };
+        appendEventLog(`Bottleneck: ${node.label} high stress (${stress.toFixed(2)})`, 'warning');
+        showToast(`Bottleneck: ${node.label}`, 'warning', 1600);
+    }
+
+    body.innerHTML = `
+      <div style="display:flex; justify-content:space-between; gap:10px; padding:8px; border:1px solid ${isScreaming ? 'rgba(255,77,77,0.35)' : '#1a1a1e'}; background:#0f0f12; border-radius:4px;">
+        <div style="min-width:0;">
+          <div style="color:${isScreaming ? '#ff4d4d' : '#c4c4c4'}; font-weight:700; font-size:0.75rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+            ${escapeHtml(node.label)}
+          </div>
+          <div style="color:#666; font-size:0.6rem;">id: ${escapeHtml(node.id)} · material: ${escapeHtml(String(node.material || 'unknown'))}</div>
+        </div>
+        <div style="text-align:right;">
+          <div style="color:#e6ff1a; font-weight:700; font-size:0.7rem;">stress ${stress.toFixed(2)}</div>
+          <div style="color:#888; font-size:0.6rem;">act ${activation.toFixed(2)} · sens ${sensory.toFixed(2)}</div>
+        </div>
+      </div>
+
+      <div style="color:#888; font-size:0.65rem; line-height:1.35;">
+        High stress without being the loudest is a classic integration bottleneck (competing evidence / compression / sensory load).
+      </div>
+
+      <div style="display:flex; flex-wrap:wrap; gap:6px;">
+        <button id="btn-bn-split" class="secondary" style="flex:1; min-width:120px;">Split node</button>
+        <button id="btn-bn-noise" class="secondary" style="flex:1; min-width:120px;">Lower noise</button>
+        <button id="btn-bn-bridge" class="secondary" style="flex:1; min-width:120px;">Add bridge note</button>
+      </div>
+    `;
+
+    document.getElementById('btn-bn-split')?.addEventListener('click', () => splitBottleneckNode(node.id));
+    document.getElementById('btn-bn-noise')?.addEventListener('click', () => lowerAmbientNoise());
+    document.getElementById('btn-bn-bridge')?.addEventListener('click', () => addBridgeNote());
+}
+
+function computeBottleneck(): { node: any; stress: number; activation: number; sensory: number } | null {
+    if (!state.objects || state.objects.length === 0) return null;
+    let max = state.objects[0];
+    for (const o of state.objects) {
+        if ((o.stress ?? 0) > (max.stress ?? 0)) max = o;
+    }
+    return {
+        node: max,
+        stress: Number(max.stress ?? 0),
+        activation: Number(max.activation ?? 0),
+        sensory: Number(max.sensory ?? 0)
+    };
+}
+
+function lowerAmbientNoise() {
+    const before = Number(state.ambient?.noise ?? 0);
+    const next = Math.max(0.05, before - 0.15);
+    state.ambient.noise = next;
+    appendEventLog(`Intervention: lowered noise (${before.toFixed(2)} → ${next.toFixed(2)})`, 'info');
+    showToast('Noise lowered', 'success', 1200);
+    drawGraph();
+    updateDOMHUD();
+}
+
+function splitBottleneckNode(nodeId: string) {
+    const node = state.objects.find((o: any) => o.id === nodeId);
+    if (!node) return;
+
+    const newId = `${nodeId}_2`;
+    if (state.objects.some((o: any) => o.id === newId)) {
+        showToast('Split already applied', 'warning', 1200);
+        return;
+    }
+
+    const clone = {
+        ...node,
+        id: newId,
+        label: `${String(node.label || nodeId)} (split)`,
+        x: (node.x ?? 0) + 55,
+        y: (node.y ?? 0) + 30,
+        vx: 0,
+        vy: 0,
+        fx: 0,
+        fy: 0,
+        stress: Math.max(0.05, (node.stress ?? 0) * 0.6),
+        sensory: Math.max(0.1, (node.sensory ?? 0) * 0.7),
+        activationHistory: []
+    };
+
+    if (String(node.label).toLowerCase().includes('note b') && !String(node.label).includes('B1')) {
+        node.label = 'Note B1';
+        clone.label = 'Note B2';
+    }
+
+    state.objects.push(clone);
+
+    const incoming = state.edges.filter((e: any) => !e.severed && e.targetId === nodeId);
+    incoming.forEach((e: any, idx: number) => {
+        if (idx % 2 === 1) e.targetId = newId;
+    });
+
+    const outgoing = state.edges.filter((e: any) => !e.severed && e.sourceId === nodeId);
+    outgoing.forEach((e: any) => {
+        const eid = `split_${e.id}_${newId}`;
+        state.edges.push({ ...e, id: eid, sourceId: newId });
+    });
+
+    state.edges.push(createLabEdge(`split_link_${nodeId}_${newId}`, nodeId, newId, 0.35));
+
+    appendEventLog(`Intervention: split ${nodeId} into ${nodeId} + ${newId}`, 'success');
+    showToast('Split applied', 'success', 1200);
+    drawGraph();
+    updateDOMHUD();
+}
+
+function addBridgeNote() {
+    const source2 = state.objects.find((o: any) => o.id === 'source2' || String(o.label || '').toLowerCase().includes('source 2'));
+    const synthesis = state.objects.find((o: any) => o.id === 'synthesis' || String(o.label || '').toLowerCase().includes('synthesis'));
+    if (!source2 || !synthesis) {
+        showToast('Bridge needs Source2 + Synthesis', 'warning', 1600);
+        return;
+    }
+
+    const id = `bridge_note_${state.step}`;
+    const bridge = {
+        ...source2,
+        id,
+        label: 'Bridge Note',
+        material: 'copper',
+        x: (source2.x + synthesis.x) / 2,
+        y: (source2.y + synthesis.y) / 2,
+        vx: 0,
+        vy: 0,
+        fx: 0,
+        fy: 0,
+        activation: 0.25,
+        stress: 0.12,
+        sensory: 0.2,
+        activationHistory: []
+    };
+    state.objects.push(bridge);
+    state.edges.push(createLabEdge(`bridge_e1_${id}`, source2.id, id, 0.55));
+    state.edges.push(createLabEdge(`bridge_e2_${id}`, id, synthesis.id, 0.55));
+
+    appendEventLog('Intervention: added bridge note (Source2 → Bridge Note → Synthesis)', 'success');
+    showToast('Bridge note added', 'success', 1200);
+    drawGraph();
+    updateDOMHUD();
 }
 
 function ensureInterventionTimelinePanel() {

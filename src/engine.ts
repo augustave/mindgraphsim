@@ -370,18 +370,25 @@ const Recorder = {
         overloaded: o.overloaded,
         label: o.label
       })),
-      patterns: gameState.patterns.map(p => ({
-        id: p.id, type: p.type,
-        nodes: p.nodes, // This stores refs to original nodes. In replay, these nodes might move? 
-        // If we store refs, they point to live objects. 
-        // Render usually iterates patterns and draws lines between p.nodes[i].x, p.nodes[i].y
-        // WE CANNOT store refs to live nodes if we want to replay past states!
-        // We must store coordinates of nodes in pattern snapshot or resolve IDs against snapshot objects.
-        // Render logic: ctx.moveTo(n1.x, n1.y).
-        // Solution: Store node IDs or cached coords in pattern snapshot.
-        _cachedNodes: (p.nodes || []).map(n => ({ x: n.x, y: n.y }))
+      patterns: gameState.patterns.map(p => {
+        const nodeIds =
+          (Array.isArray((p as any).nodeIds) && (p as any).nodeIds.length > 0)
+            ? (p as any).nodeIds
+            : (Array.isArray((p as any).object_ids) && (p as any).object_ids.length > 0)
+              ? (p as any).object_ids
+              : Array.isArray((p as any).nodes)
+                ? (p as any).nodes.map((n: any) => n?.id).filter(Boolean)
+                : [];
 
-      })),
+        return {
+          id: p.id,
+          type: p.type,
+          name: (p as any).name,
+          nodeIds,
+          // Snapshot render coordinates so replay doesn't depend on live node refs.
+          _cachedNodes: Array.isArray((p as any).nodes) ? (p as any).nodes.map((n: any) => ({ x: n.x, y: n.y })) : []
+        };
+      }),
       edges: gameState.edges.map(e => ({
         s: e.sourceId,
         t: e.targetId, // Use IDs, assuming sourceId/targetId are reliable. logic uses source/target refs.
@@ -2297,6 +2304,7 @@ function render() {
   // FR4: Pattern visual link - use displayPatterns for cleaner rendering
   // PRD R5: Controlled by showPatternOverlays toggle
   const time = performance.now() / 1000;
+  const regime = REGIMES[currentRegime];
 
   // FR4: Draw top-ranked pattern with prominent hull first
   if (showPatternOverlays && state.displayPatterns.length > 0) {
@@ -2323,6 +2331,17 @@ function render() {
       ctx.strokeStyle = 'rgba(255, 215, 0, 0.25)';
       ctx.lineWidth = 2;
       ctx.stroke();
+    }
+  }
+
+  // Identify current "bottleneck" (highest stress node) for UX highlight
+  let bottleneckNode: any = null;
+  let bottleneckStressNorm = 0;
+  for (const o of state.objects) {
+    const normalized = (o.stress - regime.stress_floor) / (regime.stress_ceiling - regime.stress_floor);
+    if (!bottleneckNode || normalized > bottleneckStressNorm) {
+      bottleneckNode = o;
+      bottleneckStressNorm = normalized;
     }
   }
 
@@ -2528,6 +2547,40 @@ function render() {
     else if (e.tension > 0.5) { ctx.strokeStyle = `rgba(255, 107, 107, ${0.5 + e.tension * 0.5})`; ctx.setLineDash([]); ctx.lineWidth = 1.5 + e.tension; }
     else { ctx.strokeStyle = `rgba(148, 148, 148, ${0.3 + e.weight * 0.3})`; ctx.setLineDash([]); ctx.lineWidth = 1 + e.weight * 0.5; }
     ctx.stroke(); ctx.setLineDash([]);
+
+    // Flow visualization (UI-only): show activation moving along edges
+    if (!e.severed) {
+      const gradient = (a.activation || 0) - (b.activation || 0);
+      const absG = Math.abs(gradient);
+      if (absG > 0.12) {
+        const intensity = Math.min(1, absG);
+        // Edge glow
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
+        ctx.strokeStyle = gradient > 0
+          ? `rgba(122, 200, 255, ${0.08 + intensity * 0.22})`
+          : `rgba(230, 255, 26, ${0.06 + intensity * 0.18})`;
+        ctx.lineWidth = 2.2 + intensity * 2.0;
+        ctx.stroke();
+
+        // Directional pulse dot
+        const edgeKey2 = [e.sourceId, e.targetId].join('|');
+        let h = 0;
+        for (let i = 0; i < edgeKey2.length; i++) h = (h * 31 + edgeKey2.charCodeAt(i)) >>> 0;
+        const phase = (h % 1000) / 1000;
+        const t = (time * 0.7 + phase) % 1;
+        const p = gradient > 0 ? t : 1 - t;
+        const px = a.x + (b.x - a.x) * p;
+        const py = a.y + (b.y - a.y) * p;
+        ctx.beginPath();
+        ctx.arc(px, py, 2.2 + intensity * 1.6, 0, Math.PI * 2);
+        ctx.fillStyle = gradient > 0
+          ? `rgba(122, 200, 255, ${0.25 + intensity * 0.35})`
+          : `rgba(230, 255, 26, ${0.22 + intensity * 0.28})`;
+        ctx.fill();
+      }
+    }
   });
 
   // Objects with lenses
@@ -2551,14 +2604,12 @@ function render() {
       color = roleEffect.color;
       r = 12 + o.mass * 15 + (o.role === 'Anchor' ? 5 : 0);
     } else if (currentLens === 'energy') {
-      const regime = REGIMES[currentRegime];
       const normalized = (o.energy - regime.energy_floor) / (regime.energy_ceiling - regime.energy_floor);
       r = 10 + normalized * 25;
       if (normalized > 0.7) color = '#ff6b6b';
       else if (normalized > 0.4) color = '#e6ff1a';
       else color = '#5cff9d';
     } else if (currentLens === 'stress') {
-      const regime = REGIMES[currentRegime];
       const normalized = (o.stress - regime.stress_floor) / (regime.stress_ceiling - regime.stress_floor);
       haloColor = `rgba(255, 107, 107, ${normalized * 0.6})`;
       haloRadius = r + 10 + normalized * 40;
@@ -2619,9 +2670,75 @@ function render() {
       ctx.beginPath(); ctx.arc(o.x, o.y, r + 4, 0, Math.PI * 2); ctx.stroke();
     }
 
+    // Bottleneck highlight (high stress even if not the loudest)
+    if (bottleneckNode && o.id === bottleneckNode.id && bottleneckStressNorm > 0.65) {
+      const intensity = Math.min(1, Math.max(0, (bottleneckStressNorm - 0.65) / 0.35));
+      const jitter = (Math.sin(time * 12) + Math.sin(time * 7.7)) * 0.6 * intensity;
+
+      // Cracking ring
+      ctx.save();
+      ctx.beginPath();
+      ctx.setLineDash([6, 4]);
+      ctx.arc(o.x, o.y, r + 10 + jitter, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(255, 77, 77, ${0.35 + intensity * 0.5})`;
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Warning glyph
+      ctx.fillStyle = `rgba(255, 77, 77, ${0.7})`;
+      ctx.font = '12px "Space Mono", monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('⚠', o.x, o.y - (r + 14));
+      ctx.restore();
+    }
+
     // Label
-    ctx.fillStyle = '#c4c4c4'; ctx.font = '11px "Space Mono", monospace'; ctx.textAlign = 'center';
-    ctx.fillText(o.label, o.x, o.y + r + 14);
+    ctx.font = '11px "Space Mono", monospace';
+    ctx.textAlign = 'center';
+    const labelText = o.label || '';
+    const metrics = ctx.measureText(labelText);
+    const padX = 5, padY = 3;
+    const labelY = o.y + r + 14;
+    // Subtle label backing so screenshots survive compression
+    ctx.fillStyle = 'rgba(5, 6, 8, 0.55)';
+    ctx.fillRect(o.x - metrics.width / 2 - padX, labelY - 11 - padY, metrics.width + padX * 2, 12 + padY * 2);
+    ctx.fillStyle = '#d8d8d8';
+    ctx.fillText(labelText, o.x, labelY);
+
+    // Role glyphs (readable in screenshots): Source vs Synthesis
+    const labelLower = (labelText || '').toLowerCase();
+    if (labelLower.includes('source')) {
+      // Document icon (page)
+      const x0 = o.x - r - 10, y0 = o.y - r - 10;
+      ctx.strokeStyle = 'rgba(230, 255, 26, 0.55)';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.rect(x0, y0, 10, 12);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(x0 + 2, y0 + 4);
+      ctx.lineTo(x0 + 8, y0 + 4);
+      ctx.moveTo(x0 + 2, y0 + 7);
+      ctx.lineTo(x0 + 8, y0 + 7);
+      ctx.stroke();
+    } else if (labelLower.includes('synthesis')) {
+      // Prism/star glyph
+      const cx = o.x, cy = o.y - r - 12;
+      const s = 6;
+      ctx.fillStyle = 'rgba(92, 255, 157, 0.7)';
+      ctx.beginPath();
+      ctx.moveTo(cx, cy - s);
+      ctx.lineTo(cx + s * 0.6, cy - s * 0.1);
+      ctx.lineTo(cx + s, cy + s * 0.2);
+      ctx.lineTo(cx + s * 0.3, cy + s * 0.4);
+      ctx.lineTo(cx, cy + s);
+      ctx.lineTo(cx - s * 0.3, cy + s * 0.4);
+      ctx.lineTo(cx - s, cy + s * 0.2);
+      ctx.lineTo(cx - s * 0.6, cy - s * 0.1);
+      ctx.closePath();
+      ctx.fill();
+    }
   });
 
   // Draw drag indicator
@@ -2636,6 +2753,13 @@ function render() {
 
   // Restore camera transform
   ctx.restore();
+
+  // Legend for the filled hull
+  if (showPatternOverlays && state.displayPatterns.length > 0) {
+    ctx.fillStyle = 'rgba(148, 148, 148, 0.9)';
+    ctx.font = '10px "Space Mono", monospace';
+    ctx.fillText('Active envelope', 10, 18);
+  }
 
   // Draw zoom indicator (outside camera transform)
   ctx.fillStyle = '#949494'; ctx.font = '10px "Space Mono", monospace';
@@ -3946,8 +4070,11 @@ const ReplaySystem = {
 
     // Rebuild Patterns
     state.patterns = frame.patterns.map(p => ({
-      id: p.id, type: p.type,
-      nodes: p._cachedNodes // render expects nodes with {x,y}
+      id: p.id,
+      type: p.type,
+      name: (p as any).name,
+      nodeIds: (p as any).nodeIds || [],
+      nodes: (p as any)._cachedNodes // render expects nodes with {x,y}
     }));
 
     // Update UI
