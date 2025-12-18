@@ -4375,6 +4375,11 @@ window.integratePhysics = integratePhysics;
 window.applySemanticPositionalBias = applySemanticPositionalBias;
 window.applyPatternInfluence = applyPatternInfluence;
 window.updateEnergyStress = updateEnergyStress;
+// QA harness expects these on global
+window.ambientStep = ambientStep;
+window.activationStep = activationStep;
+window.detectPatterns = detectPatterns;
+window.updateHUDMetrics = updateHUDMetrics;
 // S7.1 UI Hook Exports
 // S7.1 UI Hook Exports
 (window as any).drawGraph = drawGraph;
