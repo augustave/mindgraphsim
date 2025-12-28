@@ -6,6 +6,11 @@ MindGraphSim is a cognitive dynamics engine that models attention, memory, and e
 
 Ideas are treated as physical objects moving in a shared space. Each has properties like mass, material type, charge, reach, and sensory texture. These objects interact through forces representing attention, attraction, repulsion, overload, and fatigue.
 
+
+<img width="2048" height="1141" alt="Screenshot 2025-12-25 at 11 56 51 AM" src="https://github.com/user-attachments/assets/4e520dc3-154a-4c09-bcee-5462bb0e19bf" />
+
+
+
 ## S2 Features: Patterns, Time, Lenses
 
 ### Pattern Tracker
