@@ -203,4 +203,4 @@ MIT
 
 ## Authors
 
-- Tao Conrad (concept, sensory model)
+- EBENZ AUGUSTAVE - (concept, sensory model)
