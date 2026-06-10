@@ -47,7 +47,7 @@ global.performance = { now: () => Date.now() };
 global.requestAnimationFrame = () => { };
 
 // Load engine
-const enginePath = '/Users/taoconrad/Documents/GitHub 4/mindgraphsim/mgs-engine.js';
+const enginePath = path.join(__dirname, '../mgs-engine.js');
 const engineCode = fs.readFileSync(enginePath, 'utf8');
 
 try {

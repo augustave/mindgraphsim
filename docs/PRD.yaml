@@ -111,12 +111,19 @@ experience_rings:
 
 profiles_and_modes:
   base_engine_is_general: true
-  default_profile: "general_mind"
+  # Profile ids below MUST match src/profiles.ts (the runtime source of truth).
+  default_profile: "open_neutral"
   profiles:
-    - id: "general_mind"
+    - id: "open_neutral"
       label: "General Cognitive Field"
       description: "Neutral starting configuration for most users and experiments."
       default: true
+    - id: "autistic_sensory_sheet"
+      label: "Sensory Sheet Lens"
+      description: >
+        Stronger coupling between sensory channels and activation; good for
+        modeling sensory fields. One profile among many, not the engine identity.
+      marketing_surface_level: "advanced docs, specialist pages, workshops"
     - id: "autistic_intensity"
       label: "Autistic Intensity Profile"
       description: >

@@ -123,24 +123,39 @@ When sensory load exceeds threshold:
 
 The live site shows the v1 Lab UI.
 
-Open `dist/index.html` in any modern browser. No build steps required.
+```bash
+npm install
+npm run dev          # Vite dev server on :3000
+npm run build:all    # produces dist/index.html + dist/mgs-engine.js
+npm test             # regression + QA harnesses
+```
 
-For development, use `npm run dev` to start the Vite server.
+Open `dist/index.html` in any modern browser after `npm run build`.
 
 ## Development & Analysis
 
-This project uses a single-file engine architecture (`mgs-engine.js`) for portability and transparency.
+Sources live in `src/`. The Lab UI entry is `index.html` → `src/lab_view.ts` → `src/engine.ts`. The Vite engine config bundles `src/engine.ts` to a standalone IIFE at `dist/mgs-engine.js` for external consumers and the regression harness.
 
-### 1. Verification (QA)
+### Scripts
 
-Run the automated test harnesses to verify physics stability and regression safety.
+| Script | What it does |
+| --- | --- |
+| `npm run dev` | Vite dev server (port 3000) |
+| `npm run check` | `tsc --noEmit` over all of `src/` (loose) |
+| `npm run check:strict` | Strict typecheck of the modular library (everything except the legacy `engine.ts` / `lab_view.ts`). CI runs this to prevent regressions. |
+| `npm run build` | Vite build of the site → `dist/index.html` + `dist/assets/` |
+| `npm run build:engine` | Vite build of the standalone engine bundle → `dist/mgs-engine.js` |
+| `npm run build:all` | Site, then engine (site must run first; engine config has `emptyOutDir: false`) |
+| `npm run build:lib` | `tsc` declaration emit + engine bundle |
+| `npm test` | Runs the QA + regression harnesses against the freshly built engine |
+
+### Verification (QA)
 
 ```bash
-# S2 QA Harness: Regression testing against density/pattern thresholds
-node tests/generate_qa_report.cjs
-
-# S3 Model Comparison: Selecting best physics model (Baseline vs Pattern Coupled)
-node tests/generate_s3_model_comparison_report.cjs
+npm run build:engine
+node tests/generate_qa_report.cjs                  # density/pattern regression
+node tests/generate_s3_model_comparison_report.cjs # baseline vs pattern-coupled
+node tests/test_regression.cjs                     # core regression suite
 ```
 
 ### Site Build Agent Contract
@@ -169,26 +184,34 @@ See [docs/lab_report_v1.yaml](docs/lab_report_v1.yaml) for the latest certified 
 - **Catalog**: Use the "Catalog" button to switch physics profiles (e.g., Autism, ADHD) and lens frames.
 
 > [!IMPORTANT]
-> [!IMPORTANT]
-> **Codebase Status (S7 Migration Complete)**
+> **Codebase Status (S7 migration complete)**
 >
-> - **Runtime Engine**: `dist/mgs-engine.js` is the **Production Source of Truth**. All QA and regression tests target this file.
-> - **Development Source**: `src/` is the **Only** place for edits. Run `npm run build` to update the engine.
-> - **Legacy File**: `mgs-engine.js` (root) is **DEPRECATED**. Do not edit it. It is kept only for historical comparison until S8.
-> - **Tests**: All tests correctly verify `dist/mgs-engine.js`.
+> - **Sources**: `src/` is the only place for edits. Run `npm run build:all` to update both the site and the standalone engine bundle.
+> - **Runtime engine bundle**: `dist/mgs-engine.js` (built from `src/engine.ts` via `vite.engine.config.ts`) is the production source of truth consumed by the QA / regression harnesses.
+> - **Legacy file**: root `mgs-engine.js` is deprecated and kept only for historical comparison and the small number of legacy harness tests still pinned to its flat-script form. Slated for removal in S8 once the test framework migration lands.
+> - **Type strictness**: the modular library (`simulation.ts`, `physics.ts`, `ambient.ts`, `patterns.ts`, `materials.ts`, `visualization.ts`, etc.) is checked under `tsconfig.strict.json`. The legacy `engine.ts` / `lab_view.ts` remain on the loose tsconfig pending the Phase 3 god-file split.
 
 ## File Structure
 
 ```
 .
-├── dist/                 # Release bundle
-│   ├── index.html
-│   └── mgs-engine.js
-├── docs/                 # Lab reports and specs
-├── scripts/              # Build/Report tools
-├── tests/                # QA Harnesses (Node.js)
-├── mgs-engine.js         # Core Physics Engine (~4k lines)
-└── src/lab_view.ts       # S2 Lab UI entry (uses index.html)
+├── src/                   # Canonical sources
+│   ├── engine.ts          # Legacy port (4.4k lines, scheduled for split)
+│   ├── lab_view.ts        # Lab UI controller
+│   ├── simulation.ts      # New modular SimulationCore
+│   ├── physics.ts         # Force calculations
+│   ├── ambient.ts         # Background field engine
+│   ├── patterns.ts        # PatternTracker (loops, clusters, waves)
+│   ├── materials.ts       # 31 material definitions
+│   ├── visualization.ts   # Canvas render pipeline
+│   ├── types.ts           # Public Edge/Object/Pattern interfaces
+│   └── global.d.ts        # Window typings (single source of truth)
+├── dist/                  # Vite output: index.html + mgs-engine.js
+├── docs/                  # PRD, agent guardrails, lab reports
+├── scripts/               # Build/report tools
+├── tests/                 # Node.js QA harnesses (.cjs)
+├── mgs-engine.js          # DEPRECATED legacy engine (kept until S8)
+└── vite.{site,engine}.config.ts
 ```
 
 ## Origin

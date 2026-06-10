@@ -26,6 +26,7 @@ const BASE_PHYSICS_CONFIG = {
 };
 
 import { listProfiles as listDomainProfiles } from './profiles';
+import { NarrativeGenerator } from './narrative';
 
 // S2.5: Profile Registry (Physics Presets)
 // ADAPTER: Maps the domain profiles (src/profiles.ts) to Engine Physics
@@ -419,10 +420,23 @@ const Recorder = {
       meta: {
         ...meta,
         date: new Date().toISOString(),
+        mgs_version: typeof __MGS_VERSION__ !== 'undefined' ? __MGS_VERSION__ : 'unknown',
+        git_sha: typeof __MGS_GIT_SHA__ !== 'undefined' ? __MGS_GIT_SHA__ : 'unknown',
+        built_at: typeof __MGS_BUILT_AT__ !== 'undefined' ? __MGS_BUILT_AT__ : 'unknown',
         profile: currentContext.profileId || 'unknown',
         model: (currentContext as any).modelId || 'baseline',
         frame: currentContext.frameId || 'unknown',
-        regime: currentRegime || 'unknown'
+        regime: currentRegime || 'unknown',
+        // Stress is clamped to the current regime's [floor, ceiling]; expose them
+        // so JSON consumers can normalise stress values for display.
+        regime_bounds: REGIMES[currentRegime]
+          ? {
+              stress_floor: REGIMES[currentRegime].stress_floor,
+              stress_ceiling: REGIMES[currentRegime].stress_ceiling,
+              energy_floor: REGIMES[currentRegime].energy_floor,
+              energy_ceiling: REGIMES[currentRegime].energy_ceiling,
+            }
+          : null
       },
       frames: Recorder.buffer
     };
@@ -772,6 +786,16 @@ export let patternIdCounter = 0; let selectedPatternId = null, levinPatternIdCou
 // S7.2 Metrics Export
 export let hudMetrics = { globalOverloadIndex: 0, clusterStressCount: 0, recoveryTrend: 'stable', overloadHistory: [], densityStatus: 'calm' };
 let currentLens = 'none', currentRegime = 'thought_laboratory';
+
+// Cache for the O(n^2) density (mean pairwise distance) sweep. For small graphs
+// (< DENSITY_EXACT_MAX nodes) the sweep runs every frame and behavior is identical
+// to before. Above that, it recomputes only every DENSITY_RECOMPUTE_EVERY frames —
+// positions drift slowly relative to one frame, so the spread force is unaffected
+// in practice, and the per-frame cost stops being quadratic.
+const DENSITY_EXACT_MAX = 64;
+const DENSITY_RECOMPUTE_EVERY = 4;
+let _densityCache = { avgDist: 0, step: -1, count: -1 };
+
 // profile is now set by applyProfile, initialized later
 
 let logEntries = [], running = true, lastTime = performance.now();
@@ -1037,7 +1061,11 @@ function calculatePatternOverlap(nodeIdsA, nodeIdsB) {
 export function detectPatterns() {
   state.objects.forEach(o => { o.activationHistory.push(o.activation); if (o.activationHistory.length > 50) o.activationHistory.shift(); });
 
-  // Detect loops (oscillating activation patterns)
+  // Detect oscillators (nodes whose activation history has >=2 peaks in the
+  // last 15 ticks). These are tagged with type='loop' for historical reasons
+  // and downstream filter compatibility — they are NOT topological cycles on
+  // the edge graph. The human-facing name is "Oscillator @ <node>" to avoid
+  // implying a directed cycle when there isn't one.
   state.objects.forEach(o => {
     if (o.activationHistory.length < 15) return;
     const recent = o.activationHistory.slice(-15);
@@ -1067,10 +1095,10 @@ export function detectPatterns() {
         bestMatch.age = 0; // Refresh age
         bestMatch.energy = 1.0; // Re-energize
       } else {
-        // Create new loop
-        const newPattern = { id: `p${++patternIdCounter}`, type: 'loop', name: `Loop @ ${o.label}`, nodeIds: candidateNodeIds, age: 0, energy: 0.5, influence: peaks / 10 };
+        // Create new oscillator pattern (type='loop' preserved for filter compat).
+        const newPattern = { id: `p${++patternIdCounter}`, type: 'loop', name: `Oscillator @ ${o.label}`, nodeIds: candidateNodeIds, age: 0, energy: 0.5, influence: peaks / 10 };
         state.patterns.push(newPattern);
-        addLog(`Pattern formed: Loop @ ${o.label}`, 'pattern');
+        addLog(`Pattern formed: Oscillator @ ${o.label}`, 'pattern');
         // T3: Record birth in pattern timeline
         state.patternTimeline.push({
           event: 'birth',
@@ -1258,6 +1286,37 @@ export function detectPatterns() {
     }
     // Check final wave
     tryAddWave(waveMembers);
+  }
+
+  // FR2 fix: waves coalesce only at insertion, so two waves can each grow
+  // independently until their pairwise overlap drifts above the threshold with
+  // nothing re-checking existing-vs-existing. Sweep existing wave pairs and
+  // merge any at >= waveCoalesceOverlap. Repeat until stable (a merge can push
+  // a third wave over threshold). Bounded loop to avoid pathological churn.
+  {
+    const thr = PATTERN_CONFIG.waveCoalesceOverlap;
+    let merged = true;
+    let guard = 0;
+    while (merged && guard++ < 20) {
+      merged = false;
+      const waves = state.patterns.filter(p => p.type === 'wave' && p.nodeIds);
+      outer:
+      for (let i = 0; i < waves.length; i++) {
+        for (let j = i + 1; j < waves.length; j++) {
+          if (calculatePatternOverlap(waves[i].nodeIds, waves[j].nodeIds) >= thr) {
+            // Merge j into i (keep older/lower id), drop j.
+            const keep = waves[i], drop = waves[j];
+            keep.nodeIds = [...new Set([...keep.nodeIds, ...drop.nodeIds])];
+            keep.name = `Wave (${keep.nodeIds.length})`;
+            keep.energy = Math.min(1, (keep.energy || 0.6) + 0.05);
+            const idx = state.patterns.indexOf(drop);
+            if (idx >= 0) state.patterns.splice(idx, 1);
+            merged = true;
+            break outer;
+          }
+        }
+      }
+    }
   }
 
   // Detect bridges (nodes with high degree / betweenness - connect different clusters)
@@ -1640,15 +1699,29 @@ export function integratePhysics(dt) {
     objs.forEach(o => { centroidX += o.x; centroidY += o.y; });
     centroidX /= objs.length; centroidY /= objs.length;
 
-    // Compute average pairwise distance
-    let totalDist = 0, pairCount = 0;
-    for (let i = 0; i < objs.length; i++) {
-      for (let j = i + 1; j < objs.length; j++) {
-        totalDist += Math.hypot(objs[i].x - objs[j].x, objs[i].y - objs[j].y);
-        pairCount++;
+    // Compute average pairwise distance (O(n^2)). For small graphs run every
+    // frame (identical to legacy behavior); for large graphs reuse a cached
+    // value between DENSITY_RECOMPUTE_EVERY frames to avoid per-frame quadratic cost.
+    const n = objs.length;
+    const cacheUsable =
+      n >= DENSITY_EXACT_MAX &&
+      _densityCache.count === n &&
+      (state.step - _densityCache.step) < DENSITY_RECOMPUTE_EVERY;
+
+    let avgDist;
+    if (cacheUsable) {
+      avgDist = _densityCache.avgDist;
+    } else {
+      let totalDist = 0, pairCount = 0;
+      for (let i = 0; i < n; i++) {
+        for (let j = i + 1; j < n; j++) {
+          totalDist += Math.hypot(objs[i].x - objs[j].x, objs[i].y - objs[j].y);
+          pairCount++;
+        }
       }
+      avgDist = pairCount > 0 ? totalDist / pairCount : physicsConfig.layout.targetSpacing;
+      _densityCache = { avgDist, step: state.step, count: n };
     }
-    const avgDist = pairCount > 0 ? totalDist / pairCount : physicsConfig.layout.targetSpacing;
 
     // If too dense, apply outward spread force from centroid
     const densityRatio = avgDist / physicsConfig.layout.targetSpacing;
@@ -2066,6 +2139,17 @@ export function ambientStep(dt) {
   // [REGRESSION FIX] Increment pattern age (was missing, causing long-lived test failure)
   state.patterns.forEach(p => p.age = (p.age || 0) + 1);
 
+  // NOTE on stress vs overloaded — these are two distinct quantities:
+  //   o.stress      = mechanical load (edge tension + degree + ambient noise),
+  //                   clamped to the current regime's [stress_floor, stress_ceiling]
+  //                   (e.g. 0.05..1.5 in thought_laboratory, 0.25..2.2 in storm).
+  //                   It is NOT a normalised 0..1 value, so a stress reading of 1.2
+  //                   does not by itself mean "overloaded".
+  //   o.overloaded  = sensory-perception overload event, triggered by sensory load
+  //                   relative to the profile's sensory_threshold (below). Independent
+  //                   of mechanical stress.
+  // Exporters include the regime stress bounds in the recorded meta so consumers
+  // can normalise stress values for display.
   state.objects.forEach(o => {
     o.overloadEnergy = Math.max(0, o.overloadEnergy - 2.0 * dt); // Faster recovery
     // Sensory decays naturally
@@ -3020,6 +3104,7 @@ function runLevinPatternDetectors() {
           levinPatterns.push({
             id: `lp_stress_${state.step}`,
             tag: cfg.tag,
+            instance_key: 'singleton',
             type: 'levin',
             name: `Pressure Theme (${clusterIds.length})`,
             object_ids: clusterIds,
@@ -3050,6 +3135,7 @@ function runLevinPatternDetectors() {
         levinPatterns.push({
           id: `lp_anchor_${anchor.id}_${state.step}`,
           tag: cfg.tag,
+          instance_key: `anchor:${anchor.id}`,
           type: 'levin',
           name: `Anchored @ ${anchor.label}`,
           object_ids: allIds,
@@ -3084,6 +3170,7 @@ function runLevinPatternDetectors() {
           levinPatterns.push({
             id: `lp_frond_${state.step}`,
             tag: cfg.tag,
+            instance_key: 'singleton',
             type: 'levin',
             name: `Reach Out (${chainIds.length})`,
             object_ids: chainIds,
@@ -3111,6 +3198,7 @@ function runLevinPatternDetectors() {
       levinPatterns.push({
         id: `lp_bridge_${state.step}`,
         tag: cfg.tag,
+        instance_key: 'singleton',
         type: 'levin',
         name: `Connection Hub (${bridges.length})`,
         object_ids: allConnected,
@@ -3123,15 +3211,27 @@ function runLevinPatternDetectors() {
     }
   }
 
-  // Merge with existing patterns or add new ones
+  // Merge with existing patterns or add new ones.
+  // Discriminate by tag + instance_key so multiple Anchored constellations
+  // (one per Anchor) coexist instead of collapsing onto one pattern with a
+  // stale name. Falls back to tag-only matching for legacy patterns that
+  // pre-date instance_key.
   levinPatterns.forEach(newP => {
-    const existing = state.patterns.find(p => p.tag === newP.tag && p.type === 'levin');
+    const existing = state.patterns.find(p =>
+      p.type === 'levin' &&
+      p.tag === newP.tag &&
+      ((p as any).instance_key
+        ? (p as any).instance_key === (newP as any).instance_key
+        : true)
+    );
     if (existing) {
       existing.lifetime_steps++;
       existing.object_ids = newP.object_ids;
       existing.edge_ids = newP.edge_ids;
       existing.center_of_mass = newP.center_of_mass;
       existing.average_stress = newP.average_stress;
+      existing.name = newP.name; // keep label in sync with the instance
+      (existing as any).instance_key = (newP as any).instance_key;
     } else {
       state.patterns.push(newP);
       addLog(`Levin pattern: ${newP.name}`, 'pattern');
@@ -4084,55 +4184,7 @@ const ReplaySystem = {
 };
 
 
-// [S5 T2] Narrative Generator
-const NarrativeGenerator = {
-  analyze: (buffer) => {
-    if (!buffer || buffer.length === 0) return "No data recorded.";
-
-    let sumDensity = 0;
-    let maxDensity = 0;
-    const patternCounts: Record<string, number> = {};
-
-    buffer.forEach(frame => {
-      const d = frame.metrics.patternDensity || 0;
-      sumDensity += d;
-      if (d > maxDensity) maxDensity = d;
-
-      if (frame.patterns) {
-        frame.patterns.forEach(p => {
-          patternCounts[p.type] = (patternCounts[p.type] || 0) + 1;
-        });
-      }
-    });
-
-    const avgDensity = (sumDensity / buffer.length).toFixed(2);
-    const peakDensity = maxDensity.toFixed(2);
-
-    let dominantPattern = 'None';
-    let maxCount = 0;
-    for (const [type, count] of Object.entries(patternCounts)) {
-      if (count > maxCount) {
-        maxCount = count;
-        dominantPattern = type;
-      }
-    }
-
-    // Safety check for legacy buffers without overloads
-    const startOverloads = buffer[0].overloads || 0;
-    const endOverloads = buffer[buffer.length - 1].overloads || 0;
-    const newOverloads = Math.max(0, endOverloads - startOverloads);
-
-    let mood = 'calm';
-    const avgDensityNum = parseFloat(avgDensity);
-    if (avgDensityNum > 1.5) mood = 'busy';
-    if (avgDensityNum > 3.0) mood = 'chaotic';
-
-    return `Session Summary:
-The session was generally ${mood} (Avg Density: ${avgDensity}, Peak: ${peakDensity}).
-New Overloads: ${newOverloads}.
-Dominant Pattern: ${dominantPattern}.`;
-  }
-};
+// NarrativeGenerator is defined in ./narrative.ts and imported at the top of this file.
 window.NarrativeGenerator = NarrativeGenerator;
 
 
@@ -4379,11 +4431,26 @@ window.updateEnergyStress = updateEnergyStress;
 window.ambientStep = ambientStep;
 window.activationStep = activationStep;
 window.detectPatterns = detectPatterns;
+window.runLevinPatternDetectors = runLevinPatternDetectors;
 window.updateHUDMetrics = updateHUDMetrics;
 // S7.1 UI Hook Exports
 // S7.1 UI Hook Exports
 (window as any).drawGraph = drawGraph;
 (window as any).resizeCanvas = resize;
+
+// Aggregated namespace for new consumers. Individual window.X assignments above
+// are kept for the legacy test harness which flattens window onto global.
+(window as any).MGS = {
+  state, physicsConfig, hudMetrics, patternIdCounter,
+  getCurrentContext, Recorder, ReplaySystem,
+  loadScene, applyProfile, applyFrame, applyModel,
+  listProfiles, listFrames, listModels,
+  integratePhysics, applySemanticPositionalBias, applyPatternInfluence,
+  updateEnergyStress, ambientStep, activationStep, detectPatterns,
+  runLevinPatternDetectors,
+  updateHUDMetrics, drawGraph, resize, resizeCanvas: resize,
+  InputAdapter, MODEL_REGISTRY, FRAME_REGISTRY,
+};
 
 export {
   resize as resizeCanvas,

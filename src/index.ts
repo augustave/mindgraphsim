@@ -1,5 +1,5 @@
 // ============================================
-// MindGraphSim v0.7 - Genesis
+// MindGraphSim v0.8 - Genesis
 // Physics-based cognitive simulation for neurodivergent thought
 // ============================================
 
