@@ -1,0 +1,28 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "strict": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false
+  },
+  "include": [
+    "src/ambient.ts",
+    "src/index.ts",
+    "src/materials.ts",
+    "src/methodology.ts",
+    "src/narrative.ts",
+    "src/patterns.ts",
+    "src/physics.ts",
+    "src/postures.ts",
+    "src/profiles.ts",
+    "src/protocols.ts",
+    "src/reward.ts",
+    "src/simulation.ts",
+    "src/theme.ts",
+    "src/types.ts",
+    "src/visualization.ts",
+    "src/global.d.ts"
+  ]
+}

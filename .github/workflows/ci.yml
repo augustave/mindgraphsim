@@ -1,0 +1,27 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - name: Typecheck (loose, full repo)
+        run: npm run check
+      - name: Typecheck (strict, modular library)
+        run: npm run check:strict
+      - name: Build site + engine
+        run: npm run build:all
+      - name: Unit tests (Vitest, modular library)
+        run: npm run test:unit
+      - name: Run regression + QA harnesses
+        run: npm test
