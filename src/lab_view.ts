@@ -23,15 +23,7 @@ import {
 } from './engine';
 import { listProfiles } from './profiles';
 
-// Type augmentations for Window if needed for debugging
-declare global {
-    interface Window {
-        state: any;
-        physicsConfig: any;
-        hudMetrics: any;
-        lab: any; // Namespace for our lab controls
-    }
-}
+// Window typing lives in src/global.d.ts (single source of truth).
 
 // State for the Lab View
 let isRunning = false;
@@ -808,6 +800,9 @@ function exportRunJSON() {
         : {
             meta: {
                 date: new Date().toISOString(),
+                mgs_version: typeof __MGS_VERSION__ !== 'undefined' ? __MGS_VERSION__ : 'unknown',
+                git_sha: typeof __MGS_GIT_SHA__ !== 'undefined' ? __MGS_GIT_SHA__ : 'unknown',
+                built_at: typeof __MGS_BUILT_AT__ !== 'undefined' ? __MGS_BUILT_AT__ : 'unknown',
                 profile: ctx.profileId || 'unknown',
                 model: (ctx as any).modelId || 'baseline',
                 frame: ctx.frameId || 'unknown',

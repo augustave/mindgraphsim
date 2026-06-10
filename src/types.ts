@@ -83,6 +83,9 @@ export type MaterialType =
 
 export type RelationType = 'association' | 'conflict' | 'support' | 'supervision' | 'gate';
 
+// Canonical Edge shape for the modular library (simulation.ts, physics.ts, etc.).
+// The legacy engine.ts / lab_view.ts use a parallel camelCase shape (sourceId/targetId)
+// and don't share live edge objects with this one. Unify after the Phase 3 god-file split.
 export interface Edge {
   id: string;
   source_id: string;
